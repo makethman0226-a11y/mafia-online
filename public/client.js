@@ -12,6 +12,7 @@ $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("
 socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];$("chatPanel").classList.add("hidden")});
 socket.on("errorMsg",err);
 socket.on("privateResult",d=>{$("notice").textContent=d.text});
+socket.on("reporterAnnouncement",d=>{$("notice").textContent=d.text;});
 socket.on("state",s=>{state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
 function render(){if(!state)return;const me=state.me;
  $("phase").textContent=({lobby:"대기실",night:"밤",day_discuss:"낮 · 토론",day_vote:"낮 · 투표",ended:"게임 종료"})[state.phase]||state.phase;
