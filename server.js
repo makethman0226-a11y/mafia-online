@@ -77,18 +77,21 @@ function runBotNight(r){
 }
 function nightResolve(r){
  runBotNight(r);
- const a=alive(r), act=r.actions;
+ const act=r.actions, deaths=[];
+ const markDead=(p,reason)=>{if(p?.alive){p.alive=false;deaths.push(p.name+"님"+(reason||"이 탈락했습니다."));}};
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
- if(target&&target!==save){const victim=r.players.get(target);if(victim?.alive){victim.alive=false;log(r,(victim.role==="클러쳐"?"정체가 공개된 클러쳐가 탈락했습니다.":victim.name+"님이 밤에 탈락했습니다."));}}
+ if(target&&target!==save){const victim=r.players.get(target);if(victim?.alive){markDead(victim,"이 밤에 탈락했습니다.");log(r,(victim.role==="클러쳐"?"정체가 공개된 클러쳐가 탈락했습니다.":victim.name+"님이 밤에 탈락했습니다."));}}
  const judge=Object.values(act).find(x=>x.type==="judge");
- if(judge){const j=r.players.get(judge.actor), t=r.players.get(judge.target);if(j?.alive){if(t&&t.team==="evil"){t.alive=false;log(r,"판사의 처벌로 한 명이 탈락했습니다.");}else{j.alive=false;log(r,"판사가 잘못 판단해 탈락했습니다.");}}}
+ if(judge){const j=r.players.get(judge.actor), t=r.players.get(judge.target);if(j?.alive){if(t&&t.team==="evil"){markDead(t,"이 밤에 판사의 처벌로 탈락했습니다.");log(r,"판사의 처벌로 한 명이 탈락했습니다.");}else{markDead(j,"이 밤에 잘못된 판결로 탈락했습니다.");log(r,"판사가 잘못 판단해 탈락했습니다.");}}}
  const vigil=Object.values(act).find(x=>x.type==="vigilante");
- if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){t.alive=false;log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
+ if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다.");log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
  for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t)continue;
-  if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){p.alive=false;log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
+  if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){markDead(p,"이 밤에 전향 실패로 탈락했습니다.");log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
   if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
  }
+ const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
+ io.to(r.code).emit("nightResult",{text:nightText});
  const w=endCheck(r);if(w)return finish(r,w);
  r.phase="day_discuss";r.endsAt=Date.now()+60000;r.actions={};log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
@@ -101,7 +104,10 @@ function resolveVote(r){
  let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
   const target=r.players.get(sorted[0][0]);
-  if(target?.alive&&target.role!=="국회의원"){
+  if(target?.alive&&target.role==="국회의원"){
+   log(r,target.name+"님은 국회의원이었습니다. 투표로 탈락하지 않습니다.");
+   resultText=target.name+"님은 국회의원이었습니다.\\n정치인 특성으로 투표에서 생존했습니다.";
+  }else if(target?.alive){
    target.alive=false;
    const revealedRole=target.role==="클러쳐"?"시민":target.role;
    log(r,target.role==="궁정광대"?"궁정광대가 투표로 탈락했습니다!":target.name+"님이 투표로 탈락했습니다.");
