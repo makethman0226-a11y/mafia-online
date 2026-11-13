@@ -20,11 +20,11 @@ const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1
 function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase(); }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
 function publicState(r){
- return {code:r.code,phase:r.phase,day:r.day,players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:r.phase==="ended"||!p.alive||p.id===p.viewerId?p.role:null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
+ return {code:r.code,phase:r.phase,day:r.day,players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:r.phase==="ended"||!p.alive?(p.role==="클러쳐"?"시민":p.role):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
  const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote"};
- st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:r.phase==="ended"||!x.alive||x.id===p.id?x.role:null}));
+ st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:r.phase==="ended"||!x.alive?(x.role==="클러쳐"?"시민":x.role):x.id===p.id?x.role:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
 }
