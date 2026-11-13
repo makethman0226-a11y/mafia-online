@@ -32,15 +32,20 @@ function log(r,msg){r.log.push({day:r.day,text:msg}); if(r.log.length>100)r.log.
 function alive(r){return [...r.players.values()].filter(p=>p.alive);}
 function assign(r){
  const n=r.players.size;
- const roles=["마피아","궁정광대","의사","경찰","판사","국회의원","기자","자경단","제사장"];
- if(n>=7)roles.push("스파이");
- if(n>=9)roles.push("클러쳐");
- if(n>=11)roles.push("선교사");
- if(n>=12)roles.push("마피아");
- if(n>=15)roles.push("마피아");
- while(roles.length<n)roles.push("시민");
- const shuffled=[...roles].sort(()=>Math.random()-.5);
- [...r.players.values()].forEach((p,i)=>{p.role=shuffled[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
+ const roles=[];
+ const mafiaCount=Math.max(1,Math.floor(n/5));
+ for(let i=0;i<mafiaCount;i++)roles.push("마피아");
+ if(n>=8)roles.push("스파이");
+ if(n>=12)roles.push("클러쳐");
+ if(n>=14)roles.push("선교사");
+ roles.push("궁정광대");
+ const goodRoles=["의사","경찰","판사","국회의원","기자","자경단","제사장"];
+ while(roles.length<n){
+  if(Math.random()<0.20)roles.push("시민");
+  else roles.push(goodRoles[Math.floor(Math.random()*goodRoles.length)]);
+ }
+ for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
+ [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
  r.phase="night";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+30000;
  log(r,"게임 시작! 밤이 되었습니다.");
 }
