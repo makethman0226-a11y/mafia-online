@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101827"><title>MAFIA ONLINE</title><link rel="stylesheet" href="/style.css"></head>
+<body><main class="wrap"><header><div class="mark">M</div><div><h1>MAFIA ONLINE</h1><p>진실과 거짓이 교차하는 밤</p></div><span class="online">ONLINE</span></header>
+<section id="home" class="panel"><h2>게임 입장</h2><label>닉네임<input id="name" maxlength="18" placeholder="게임에서 사용할 닉네임"></label><button id="create">방 만들기</button><div class="join"><input id="code" maxlength="6" placeholder="방 코드"><button id="join">참가하기</button></div><p class="hint">6~15명 · 공개 방 코드를 친구에게 공유하세요.</p></section>
+<section id="game" class="hidden"><div class="bar"><span id="room"></span><span id="phase"></span><span id="timer"></span></div><div class="panel"><div class="roleline"><div><small>나의 직업</small><h2 id="role">대기 중</h2></div><strong id="team"></strong></div><p id="notice">방에 입장했습니다.</p><div id="players" class="players"></div><div id="controls"></div></div>
+<div class="panel"><h3>게임 기록</h3><div id="log" class="log"></div></div>
+<div class="panel"><h3>대화</h3><div id="chat" class="chat"></div><div class="join"><input id="message" maxlength="160" placeholder="메시지 입력"><button id="send">전송</button></div><button id="teamChat" class="secondary hidden">악인팀 채팅 보기</button></div></section>
+<p id="error" class="error"></p><footer>MAFIA ONLINE · 개인정보를 채팅에 쓰지 마세요.</footer></main><script src="/socket.io/socket.io.js"></script><script src="/client.js"></script></body></html>
