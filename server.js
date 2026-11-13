@@ -54,7 +54,23 @@ function endCheck(r){
  return null;
 }
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
+function botChoose(r,arr){return arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
+function runBotNight(r){
+ if(!r.aiMode)return;
+ const living=alive(r), bots=living.filter(p=>p.isBot);
+ for(const b of bots){
+  const others=living.filter(p=>p.id!==b.id);
+  if(!others.length)continue;
+  if(b.role==="마피아"&&!Object.values(r.actions).some(x=>x.type==="attack")){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["attack:"+b.id]={type:"attack",actor:b.id,target:t.id};}
+  if(b.role==="의사"){const t=botChoose(r,others);if(t)r.actions["heal:"+b.id]={type:"heal",actor:b.id,target:t.id};}
+  if(b.role==="판사"){const t=botChoose(r,others);if(t)r.actions["judge:"+b.id]={type:"judge",actor:b.id,target:t.id};}
+  if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}
+  if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
+  if(b.role==="제사장"&&!b.used.revive){const t=botChoose([...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
+ }
+}
 function nightResolve(r){
+ runBotNight(r);
  const a=alive(r), act=r.actions;
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
@@ -72,6 +88,7 @@ function nightResolve(r){
 }
 function nextVote(r){r.phase="day_vote";r.votes={};r.endsAt=Date.now()+30000;log(r,"투표가 시작되었습니다.");sendState(r);}
 function resolveVote(r){
+ if(r.aiMode){for(const b of alive(r).filter(p=>p.isBot)){const candidates=alive(r).filter(p=>p.id!==b.id);if(!candidates.length)continue;let choices=candidates;if(b.team==="evil")choices=candidates.filter(p=>p.team!=="evil");if(b.role==="궁정광대")choices=candidates;const target=botChoose(r,choices);if(target)r.votes[b.id]=target.id;}}
  const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v);if(p?.alive)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
@@ -102,6 +119,13 @@ io.on("connection",s=>{
  });
  s.on("cancelQueue",()=>{removeFromQueue(s.id);s.emit("queueStatus",{waiting:false,count:matchmakingQueue.length});});
 
+ s.on("soloStart",name=>{
+  name=clean(name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
+  const code=roomCode(),r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},aiMode:true};
+  r.players.set(s.id,{id:s.id,name,alive:true,isBot:false});
+  for(let i=1;i<6;i++){const id="bot_"+crypto.randomBytes(5).toString("hex");r.players.set(id,{id,name:["하늘","단풍","별이","구름","달빛"][i-1],alive:true,isBot:true});}
+  rooms.set(code,r);s.join(code);s.emit("joined",{code,aiMode:true});assign(r);log(r,"AI 대련 모드 시작! AI 플레이어 5명과 대결합니다.");sendState(r);
+ });
  s.on("create",name=>{name=clean(name);if(!name)return;const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{}};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);});
  s.on("join",({code,name})=>{const r=rooms.get(String(code||"").toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=15)return s.emit("errorMsg","방을 찾을 수 없거나 입장할 수 없습니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);});
  s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6)return s.emit("errorMsg","방장만 6명 이상일 때 시작할 수 있습니다.");assign(r);sendState(r);});
