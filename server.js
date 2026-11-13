@@ -15,7 +15,8 @@ const ROLES = {
  마피아:{team:"evil"}, 스파이:{team:"evil"}, 클러쳐:{team:"evil"}, 선교사:{team:"evil"},
  궁정광대:{team:"solo"}
 };
-const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,18);\nconst cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,160);
+const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/g,"").trim().slice(0,18);
+const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,160);
 function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase(); }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
 function publicState(r){
@@ -106,7 +107,7 @@ function resolveVote(r){
   const target=r.players.get(sorted[0][0]);
   if(target?.alive&&target.role==="국회의원"){
    log(r,target.name+"님은 국회의원이었습니다. 투표로 탈락하지 않습니다.");
-   resultText=target.name+"님은 국회의원이었습니다.\\n정치인 특성으로 투표에서 생존했습니다.";
+   resultText=target.name+"님은 국회의원이었습니다.\n정치인 특성으로 투표에서 생존했습니다.";
   }else if(target?.alive){
    target.alive=false;
    const revealedRole=target.role==="클러쳐"?"시민":target.role;
@@ -126,7 +127,9 @@ function resolveVote(r){
  io.to(r.code).emit("voteResult",{text:resultText});
  if(jesterWon)return finish(r,"궁정광대");
  const w=endCheck(r);if(w)return finish(r,w);
- r.phase="night";r.day++;r.actions={};r.endsAt=Date.now()+30000;\n if(r.day>=4&&!r.presidentId){const politician=alive(r).find(p=>p.role==="국회의원");if(politician){r.presidentId=politician.id;log(r,politician.name+"님이 대통령이 되었습니다. 이제 탈락하지 않습니다.");}}\n log(r,"밤이 되었습니다.");sendState(r);
+ r.phase="night";r.day++;r.actions={};r.endsAt=Date.now()+30000;
+ if(r.day>=4&&!r.presidentId){const politician=alive(r).find(p=>p.role==="국회의원");if(politician){r.presidentId=politician.id;log(r,politician.name+"님이 대통령이 되었습니다. 이제 탈락하지 않습니다.");}}
+ log(r,"밤이 되었습니다.");sendState(r);
 }
 setInterval(()=>{for(const r of rooms.values()){if(!r.endsAt||Date.now()<r.endsAt)continue;
  if(r.phase==="night")nightResolve(r);else if(r.phase==="day_discuss")nextVote(r);else if(r.phase==="day_vote")resolveVote(r);
