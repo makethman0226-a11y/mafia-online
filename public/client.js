@@ -40,3 +40,9 @@ $("send").onclick=sendChat;$("message").addEventListener("keydown",e=>{if(e.key=
 function sendChat(){const text=$("message").value.trim();if(!text)return;if(teamMode&&!state?.teamChatAllowed)return err("악인팀 대화 권한이 없습니다.");socket.emit("chat",{text,team:teamMode});$("message").value=""}
 socket.on("chat",m=>{const key=m.team?"team":"public";chatMessages[key].push(m);if(chatMessages[key].length>100)chatMessages[key].shift();if(teamMode===!!m.team&&!$("chatPanel").classList.contains("hidden"))renderChat()});
 setInterval(()=>{if(state?.endsAt)$("timer").textContent=Math.max(0,Math.ceil((state.endsAt-Date.now())/1000))+"초"},250);
+socket.on("voteResult",d=>{
+ $("voteResultText").textContent=d.text;
+ $("voteResultOverlay").classList.remove("hidden");
+ clearTimeout(window.voteResultTimer);
+ window.voteResultTimer=setTimeout(()=>$("voteResultOverlay").classList.add("hidden"),5000);
+});
