@@ -122,7 +122,7 @@ function resolveVote(r){
   resultText="이번 투표에서는 아무도 탈락하지 않았습니다.";
  }
  const evilRemaining=alive(r).filter(p=>p.team==="evil").length;
- resultText+="\\n악인팀이 "+evilRemaining+"명 남았습니다.";
+ resultText+="\n악인팀이 "+evilRemaining+"명 남았습니다.";
  io.to(r.code).emit("voteResult",{text:resultText});
  if(jesterWon)return finish(r,"궁정광대");
  const w=endCheck(r);if(w)return finish(r,w);
@@ -165,7 +165,7 @@ io.on("connection",s=>{
  const allowed={의사:"heal",마피아:"attack",판사:"judge",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id)return;
  if(type==="revive"&&t.alive)return;
- if(type==="convert"&&(p.used.convert||t.team!=="good"))return;
+ if(type==="convert"&&p.used.convert)return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
  if(p.role==="경찰"&&type==="inspect")s.emit("privateResult",{text:t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다."});
  if(p.role==="스파이"&&type==="spy"){s.emit("privateResult",{text:"상대 직업: "+t.role});if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이가 마피아와 서로 정체를 확인했습니다.");}}
