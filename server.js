@@ -19,12 +19,13 @@ const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/
 const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/g,"").trim().slice(0,160);
 function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase(); }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
+function revealedRole(p){ return p.role==="클러쳐" ? "시민" : p.role; }
 function publicState(r){
- return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
+ return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day};
- st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:x.id===p.id?x.role:null}));
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day};
+ st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
 }
@@ -78,7 +79,7 @@ function runBotNight(r){
 function nightResolve(r){
  runBotNight(r);
  const act=r.actions, deaths=[];
- const markDead=(p,reason)=>{if(p?.alive&&p.id!==r.presidentId){p.alive=false;deaths.push(p.name+"님"+(reason||"이 탈락했습니다."));}};
+ const markDead=(p,reason)=>{if(p?.alive&&p.id!==r.presidentId){p.alive=false;const reveal=p.team==="evil"?" (직업: "+revealedRole(p)+")":"";deaths.push(p.name+"님"+(reason||"이 탈락했습니다.")+reveal);}};
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
  if(target&&target!==save){const victim=r.players.get(target);if(victim?.alive){markDead(victim,"이 밤에 탈락했습니다.");log(r,victim.name+"님이 밤에 탈락했습니다.");}}
@@ -113,7 +114,7 @@ function resolveVote(r){
   }else if(target?.alive){
    target.alive=false;
    log(r,target.role==="궁정광대"?"궁정광대가 투표로 탈락했습니다!":target.name+"님이 투표로 탈락했습니다.");
-   resultText=target.name+"님이 투표로 탈락했습니다.";
+   resultText=target.name+"님이 투표로 탈락했습니다."+(target.team==="evil"?"\n직업: "+revealedRole(target):"");
    jesterWon=target.role==="궁정광대";
   }else{
    log(r,"투표 결과 처벌 대상이 없습니다.");
@@ -176,12 +177,35 @@ io.on("connection",s=>{
  if(type==="revive"&&p.used.revive)return;
  sendState(r);
  });
- s.on("special",({target})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t?.alive)return;
- if(p.role==="경찰"&&r.phase==="night"){const res=t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다.";s.emit("privateResult",{text:res});}
- if(p.role==="스파이"&&r.phase==="night"){s.emit("privateResult",{text:"상대 직업: "+t.role});if(t.role==="마피아"){p.joined=true;t.joined=true;sendState(r);}}
- if(p.role==="기자"&&r.phase==="day_discuss"&&p.used.reporterDay!==r.day){p.used.reporterDay=r.day;log(r,"기자 발표: "+t.name+"님의 직업은 "+(t.role==="클러쳐"?"시민":t.role)+"입니다.");}
- if(p.role==="자경단"&&r.phase==="day_discuss")s.emit("privateResult",{text:t.team==="evil"?"악인입니다. 밤에 행동할 수 있습니다.":"악인이 아닙니다."});
- sendState(r);
+ s.on("special",({target})=>{
+  const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);
+  if(!r||!p?.alive||!t?.alive||p.id===t.id)return;
+  if(p.role==="경찰"&&r.phase==="night"&&p.used.policeNight!==r.day){
+   p.used.policeNight=r.day;
+   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다.")});
+   sendState(r);
+   return;
+  }
+  if(p.role==="스파이"&&r.phase==="night"&&p.used.spyNight!==r.day){
+   p.used.spyNight=r.day;
+   s.emit("privateResult",{text:t.name+"님의 직업: "+revealedRole(t)});
+   if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이와 마피아가 서로 정체를 확인했습니다.");}
+   sendState(r);
+   return;
+  }
+  if(p.role==="기자"&&r.phase==="day_discuss"&&p.used.reporterDay!==r.day){
+   p.used.reporterDay=r.day;
+   const announcement="기자 발표: "+t.name+"님의 직업은 "+revealedRole(t)+"입니다.";
+   log(r,announcement);
+   io.to(r.code).emit("reporterAnnouncement",{text:announcement});
+   sendState(r);
+   return;
+  }
+  if(p.role==="자경단"&&r.phase==="day_discuss"&&p.used.vigilanteInspectDay!==r.day){
+   p.used.vigilanteInspectDay=r.day;
+   s.emit("privateResult",{text:t.team==="evil"?"악인입니다. 밤에 행동할 수 있습니다.":"악인이 아닙니다."});
+   sendState(r);
+  }
  });
  s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
  s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=cleanMessage(msg);if(!message)return;
