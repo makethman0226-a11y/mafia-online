@@ -3,6 +3,8 @@ const $=id=>document.getElementById(id);
 function err(t){$("error").textContent=t||""}
 function emitAction(type,id){socket.emit("action",{type,target:id})}
 function button(label,fn,disabled=false){const b=document.createElement("button");b.textContent=label;b.disabled=disabled;b.onclick=fn;return b}
+$("quick").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("quickJoin",$("name").value)};
+socket.on("queueStatus",d=>{if(d.waiting){$("home").classList.remove("hidden");$("game").classList.add("hidden");err("자동 매칭 대기 중… 현재 대기 인원 "+d.count+"명 (최소 6명)");}else err("매칭 대기가 취소되었습니다.");});
 $("create").onclick=()=>{err("");socket.emit("create",$("name").value)};
 $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("code").value})};
 socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code});
