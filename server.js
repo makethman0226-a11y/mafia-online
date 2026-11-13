@@ -16,7 +16,7 @@ const ROLES = {
  궁정광대:{team:"solo"}
 };
 const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/g,"").trim().slice(0,18);
-const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,160);
+const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/g,"").trim().slice(0,160);
 function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase(); }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
 function publicState(r){
