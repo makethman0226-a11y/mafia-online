@@ -53,9 +53,8 @@ function assign(r){
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
 function endCheck(r){
- const a=alive(r), evil=a.filter(p=>p.team==="evil").length, good=a.filter(p=>p.team==="good").length, solo=a.find(p=>p.role==="궁정광대");
+ const a=alive(r), evil=a.filter(p=>p.team==="evil").length, good=a.filter(p=>p.team==="good").length;
  if(!a.length)return "무승부";
- if(solo&&solo.alive&&a.length===1)return "궁정광대";
  if(evil===0)return "선량한 팀";
  if(evil>=good)return "악인 팀";
  return null;
