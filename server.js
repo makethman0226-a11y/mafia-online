@@ -88,7 +88,7 @@ function nightResolve(r){
  if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다.");log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
  for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t||(x.type!=="revive"&&!t.alive))continue;
   if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){markDead(p,"이 밤에 전향 실패로 탈락했습니다.");log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
-  if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
+  if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;const deathIndex=deaths.findIndex(d=>d.startsWith(t.name+"님"));if(deathIndex>=0)deaths.splice(deathIndex,1);p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
  }
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
  io.to(r.code).emit("nightResult",{text:nightText});
