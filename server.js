@@ -33,11 +33,12 @@ function alive(r){return [...r.players.values()].filter(p=>p.alive);}
 function assign(r){
  const n=r.players.size;
  const roles=[];
- const mafiaCount=Math.max(1,Math.floor(n/5));
+ const mafiaCount=Math.min(3,Math.max(1,Math.floor(n/5)));
  for(let i=0;i<mafiaCount;i++)roles.push("마피아");
- if(n>=8)roles.push("스파이");
- if(n>=12)roles.push("클러쳐");
- if(n>=14)roles.push("선교사");
+ const evilExtras=[["스파이",8],["클러쳐",12],["선교사",14]];
+ for(const [role,minPlayers] of evilExtras){
+  if(n>=minPlayers&&roles.filter(x=>ROLES[x].team==="evil").length<3)roles.push(role);
+ }
  roles.push("궁정광대");
  const goodRoles=["의사","경찰","판사","국회의원","기자","자경단","제사장"];
  while(roles.length<n){
@@ -96,10 +97,28 @@ function resolveVote(r){
  if(r.aiMode){for(const b of alive(r).filter(p=>p.isBot)){const candidates=alive(r).filter(p=>p.id!==b.id);if(!candidates.length)continue;let choices=candidates;if(b.team==="evil")choices=candidates.filter(p=>p.team!=="evil");if(b.role==="궁정광대")choices=candidates;const target=botChoose(r,choices);if(target)r.votes[b.id]=target.id;}}
  const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v);if(p?.alive)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+ let resultText="";
+ let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
-  const target=r.players.get(sorted[0][0]);if(target?.alive&&target.role!=="국회의원"){target.alive=false;log(r,target.role==="궁정광대"?"궁정광대가 투표로 탈락했습니다!":target.name+"님이 투표로 탈락했습니다.");if(target.role==="궁정광대")return finish(r,"궁정광대");}
-  else log(r,"투표 결과 처벌 대상이 없습니다.");
- }else log(r,"동점 또는 투표 없음: 아무도 탈락하지 않았습니다.");
+  const target=r.players.get(sorted[0][0]);
+  if(target?.alive&&target.role!=="국회의원"){
+   target.alive=false;
+   const revealedRole=target.role==="클러쳐"?"시민":target.role;
+   log(r,target.role==="궁정광대"?"궁정광대가 투표로 탈락했습니다!":target.name+"님이 투표로 탈락했습니다.");
+   resultText=target.name+"님은 "+revealedRole+"였습니다.";
+   jesterWon=target.role==="궁정광대";
+  }else{
+   log(r,"투표 결과 처벌 대상이 없습니다.");
+   resultText="이번 투표에서는 아무도 탈락하지 않았습니다.";
+  }
+ }else{
+  log(r,"동점 또는 투표 없음: 아무도 탈락하지 않았습니다.");
+  resultText="이번 투표에서는 아무도 탈락하지 않았습니다.";
+ }
+ const evilRemaining=alive(r).filter(p=>p.team==="evil").length;
+ resultText+="\\n악인팀이 "+evilRemaining+"명 남았습니다.";
+ io.to(r.code).emit("voteResult",{text:resultText});
+ if(jesterWon)return finish(r,"궁정광대");
  const w=endCheck(r);if(w)return finish(r,w);
  r.phase="night";r.day++;r.actions={};r.endsAt=Date.now()+30000;log(r,"밤이 되었습니다.");sendState(r);
 }
