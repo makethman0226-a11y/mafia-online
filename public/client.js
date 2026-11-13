@@ -46,3 +46,9 @@ socket.on("voteResult",d=>{
  clearTimeout(window.voteResultTimer);
  window.voteResultTimer=setTimeout(()=>$("voteResultOverlay").classList.add("hidden"),5000);
 });
+socket.on("nightResult",d=>{
+ $("voteResultText").textContent=d.text;
+ $("voteResultOverlay").classList.remove("hidden");
+ clearTimeout(window.voteResultTimer);
+ window.voteResultTimer=setTimeout(()=>$("voteResultOverlay").classList.add("hidden"),5000);
+});
