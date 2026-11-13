@@ -13,11 +13,11 @@ socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.rem
 socket.on("errorMsg",err);
 socket.on("privateResult",d=>{privateNotice=d.text;render()});
 socket.on("reporterAnnouncement",d=>{announcementNotice=d.text;render()});
-socket.on("state",s=>{state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
+socket.on("state",s=>{if(state&&(state.phase!==s.phase||state.day!==s.day)){privateNotice="";announcementNotice="";}state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
 function render(){if(!state)return;const me=state.me;
  $("phase").textContent=({lobby:"대기실",night:"밤",day_discuss:"낮 · 토론",day_vote:"낮 · 투표",ended:"게임 종료"})[state.phase]||state.phase;
  $("role").textContent=me?.role?(me.isPresident?"대통령 · 국회의원":me.role):"대기 중";$("team").textContent=me?.team==="evil"?"악인 진영":me?.team==="good"?"선량한 진영":me?.team==="solo"?"개인 진영":"";
- $("notice").textContent=privateNotice||announcementNotice||(state.aiMode?"AI 대련 모드 · AI 플레이어 5명과 대결 중":state.winner?state.winner+" 승리!":state.phase==="lobby"?"6명 이상 모이면 방장이 시작할 수 있어요.":me?.alive?"당신의 선택으로 게임의 흐름を 바꾸세요.":"관전 중입니다.");
+ $("notice").textContent=privateNotice||announcementNotice||(state.aiMode?"AI 대련 모드 · AI 플레이어 5명과 대결 중":state.winner?state.winner+" 승리!":state.phase==="lobby"?"6명 이상 모이면 방장이 시작할 수 있어요.":me?.alive?"당신의 선택으로 게임의 흐름을 바꾸세요.":"관전 중입니다.");
  $("timer").textContent=state.endsAt?"남은 시간 "+Math.max(0,Math.ceil((state.endsAt-(Date.now()+serverOffset))/1000))+"초":"";
  const list=$("players");list.innerHTML="";
  state.players.forEach(p=>{const d=document.createElement("div");d.className="player"+(!p.alive?" dead":"");d.textContent=p.name+(p.id===me?.id?" (나)":"")+(p.role?" · "+p.role:"");if(me?.alive&&p.id!==me.id&&(p.alive||(state.phase==="night"&&me.role==="제사장"))){let label=null,fn=null;
