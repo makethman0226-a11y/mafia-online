@@ -8,6 +8,7 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.get("/health", (_, res) => res.json({ ok: true }));
 const rooms = new Map();
+const matchmakingQueue = [];
 const ROLES = {
  시민:{team:"good"}, 의사:{team:"good"}, 경찰:{team:"good"}, 판사:{team:"good"},
  국회의원:{team:"good"}, 기자:{team:"good"}, 자경단:{team:"good"}, 제사장:{team:"good"},
@@ -83,7 +84,24 @@ function resolveVote(r){
 setInterval(()=>{for(const r of rooms.values()){if(!r.endsAt||Date.now()<r.endsAt)continue;
  if(r.phase==="night")nightResolve(r);else if(r.phase==="day_discuss")nextVote(r);else if(r.phase==="day_vote")resolveVote(r);
 }},500);
+function removeFromQueue(id){const i=matchmakingQueue.findIndex(x=>x.id===id);if(i>=0)matchmakingQueue.splice(i,1);}
+function runMatchmaking(){
+ while(matchmakingQueue.length>=6){
+  const batch=matchmakingQueue.splice(0,Math.min(15,matchmakingQueue.length));
+  const code=roomCode(),r={code,players:new Map(),host:batch[0].id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{}};
+  for(const entry of batch){entry.socket.join(code);r.players.set(entry.id,{id:entry.id,name:entry.name,alive:true});entry.socket.emit("joined",{code,matched:true});}
+  rooms.set(code,r);assign(r);sendState(r);
+ }
+}
 io.on("connection",s=>{
+ s.on("quickJoin",name=>{
+  name=clean(name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
+  removeFromQueue(s.id);matchmakingQueue.push({id:s.id,name,socket:s});
+  s.emit("queueStatus",{waiting:true,count:matchmakingQueue.length});
+  runMatchmaking();
+ });
+ s.on("cancelQueue",()=>{removeFromQueue(s.id);s.emit("queueStatus",{waiting:false,count:matchmakingQueue.length});});
+
  s.on("create",name=>{name=clean(name);if(!name)return;const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{}};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);});
  s.on("join",({code,name})=>{const r=rooms.get(String(code||"").toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=15)return s.emit("errorMsg","방을 찾을 수 없거나 입장할 수 없습니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);});
  s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6)return s.emit("errorMsg","방장만 6명 이상일 때 시작할 수 있습니다.");assign(r);sendState(r);});
