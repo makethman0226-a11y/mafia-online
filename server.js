@@ -15,14 +15,14 @@ const ROLES = {
  마피아:{team:"evil"}, 스파이:{team:"evil"}, 클러쳐:{team:"evil"}, 선교사:{team:"evil"},
  궁정광대:{team:"solo"}
 };
-const clean = s => String(s || "").replace(/[<>]/g,"").trim().slice(0,18);
+const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,18);\nconst cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\\u0000-\\u001f\\u007f]/g,"").trim().slice(0,160);
 function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase(); }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
 function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:r.phase==="ended"||!p.alive||p.id===p.viewerId?p.role:null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,canVote:p.alive&&r.phase==="day_vote"};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote"};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:r.phase==="ended"||!x.alive||x.id===p.id?x.role:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -78,7 +78,7 @@ function runBotNight(r){
 function nightResolve(r){
  runBotNight(r);
  const act=r.actions, deaths=[];
- const markDead=(p,reason)=>{if(p?.alive){p.alive=false;deaths.push(p.name+"님"+(reason||"이 탈락했습니다."));}};
+ const markDead=(p,reason)=>{if(p?.alive&&p.id!==r.presidentId){p.alive=false;deaths.push(p.name+"님"+(reason||"이 탈락했습니다."));}};
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
  if(target&&target!==save){const victim=r.players.get(target);if(victim?.alive){markDead(victim,"이 밤에 탈락했습니다.");log(r,(victim.role==="클러쳐"?"정체가 공개된 클러쳐가 탈락했습니다.":victim.name+"님이 밤에 탈락했습니다."));}}
@@ -86,7 +86,7 @@ function nightResolve(r){
  if(judge){const j=r.players.get(judge.actor), t=r.players.get(judge.target);if(j?.alive){if(t&&t.team==="evil"){markDead(t,"이 밤에 판사의 처벌로 탈락했습니다.");log(r,"판사의 처벌로 한 명이 탈락했습니다.");}else{markDead(j,"이 밤에 잘못된 판결로 탈락했습니다.");log(r,"판사가 잘못 판단해 탈락했습니다.");}}}
  const vigil=Object.values(act).find(x=>x.type==="vigilante");
  if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다.");log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
- for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t)continue;
+ for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t?.alive)continue;
   if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){markDead(p,"이 밤에 전향 실패로 탈락했습니다.");log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
   if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
  }
@@ -126,7 +126,7 @@ function resolveVote(r){
  io.to(r.code).emit("voteResult",{text:resultText});
  if(jesterWon)return finish(r,"궁정광대");
  const w=endCheck(r);if(w)return finish(r,w);
- r.phase="night";r.day++;r.actions={};r.endsAt=Date.now()+30000;log(r,"밤이 되었습니다.");sendState(r);
+ r.phase="night";r.day++;r.actions={};r.endsAt=Date.now()+30000;\n if(r.day>=4&&!r.presidentId){const politician=alive(r).find(p=>p.role==="국회의원");if(politician){r.presidentId=politician.id;log(r,politician.name+"님이 대통령이 되었습니다. 이제 탈락하지 않습니다.");}}\n log(r,"밤이 되었습니다.");sendState(r);
 }
 setInterval(()=>{for(const r of rooms.values()){if(!r.endsAt||Date.now()<r.endsAt)continue;
  if(r.phase==="night")nightResolve(r);else if(r.phase==="day_discuss")nextVote(r);else if(r.phase==="day_vote")resolveVote(r);
@@ -179,8 +179,8 @@ io.on("connection",s=>{
  if(p.role==="자경단"&&r.phase==="day_discuss")s.emit("privateResult",{text:t.team==="evil"?"악인입니다. 밤에 행동할 수 있습니다.":"악인이 아닙니다."});
  sendState(r);
  });
- s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=="day_vote"||!p?.alive||!t?.alive)return;r.votes[s.id]=target;sendState(r);});
- s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=clean(msg).slice(0,160);if(!message)return;
+ s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=="day_vote"||!p?.alive||!t?.alive||p.id===t.id)return;r.votes[s.id]=target;sendState(r);});
+ s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=cleanMessage(msg);if(!message)return;
  if(team){if(!joinedEvil(p))return;for(const q of r.players.values())if(joinedEvil(q))io.to(q.id).emit("chat",{name:p.name,text:message,team:true});}
  else{if(!p.alive||r.phase==="ended")return;io.to(r.code).emit("chat",{name:p.name,text:message,team:false});}
  });
