@@ -252,6 +252,11 @@ io.on("connection",s=>{
  s.on("special",({target})=>{
   const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);
   if(!r||!p?.alive||!t?.alive||p.id===t.id)return;
+  if(p.role==="자경단"&&r.phase==="night_vigilante"&&!p.used.vigilanteTarget){
+   p.used.vigilanteTarget=t.id;p.used.vigilanteInvestigatedDay=r.day;recordAbility(p,r,t,"야간 정체 조사");
+   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 다음 밤에 이 대상을 공격할 수 있습니다.":"악인이 아닙니다.")});
+   advanceNightTurn(r);return;
+  }
   if(p.role==="경찰"&&r.phase==="night_police"&&p.used.policeNight!==r.day){
    p.used.policeNight=r.day;recordAbility(p,r,t,"경찰 조사");
    s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다.")});
