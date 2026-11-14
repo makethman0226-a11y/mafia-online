@@ -107,21 +107,21 @@ function resolveVote(r){
  }
  const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v),target=r.players.get(t);if(p?.alive&&target?.alive)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
- let resultText=judgeAction?"판사의 능력이 사용되었습니다.\\n":"";
+ let resultText=judgeAction?"판사의 능력이 사용되었습니다.\n":"";
  let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
   const target=r.players.get(sorted[0][0]);
   if(target?.alive&&target.role==="국회의원"){
    log(r,target.name+"님은 투표에서 탈락하지 않았습니다.");
-   resultText=target.name+"님은 투표에서 탈락하지 않았습니다.";
+   resultText+=target.name+"님은 투표에서 탈락하지 않았습니다.";
   }else if(target?.alive){
    target.alive=false;
    log(r,target.role==="궁정광대"?"궁정광대가 투표로 탈락했습니다!":target.name+"님이 투표로 탈락했습니다.");
-   resultText=target.name+"님이 투표로 탈락했습니다."+(target.team==="evil"?"\n직업: "+revealedRole(target):"");
+   resultText+=target.name+"님이 투표로 탈락했습니다."+(target.team==="evil"?"\n직업: "+revealedRole(target):"");
    jesterWon=target.role==="궁정광대";
   }else{
    log(r,"투표 결과 처벌 대상이 없습니다.");
-   resultText="이번 투표에서는 아무도 탈락하지 않았습니다.";
+   resultText+="이번 투표에서는 아무도 탈락하지 않았습니다.";
   }
  }else{
   log(r,"동점 또는 투표 없음: 아무도 탈락하지 않았습니다.");
