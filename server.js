@@ -167,7 +167,7 @@ io.on("connection",s=>{
  s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6)return s.emit("errorMsg","방장만 6명 이상일 때 시작할 수 있습니다.");assign(r);sendState(r);});
  s.on("action",({type,target})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t||r.phase!=="night")return;
  if(type!=="revive"&&!t.alive)return;
- if(type==="revive"&&t.alive)return;
+ if(type==="revive"&&(t.alive||p.used.revive))return;
  const allowed={의사:"heal",마피아:"attack",판사:"judge",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id)return;
  if(type==="revive"&&t.alive)return;
@@ -176,7 +176,6 @@ io.on("connection",s=>{
  const abilityLabels={heal:"치료",attack:"공격",judge:"처벌",vigilante:"공격",convert:"전향",revive:"부활"};recordAbility(p,r,t,abilityLabels[type]||type);
  if(p.role==="경찰"&&type==="inspect")s.emit("privateResult",{text:t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다."});
  if(p.role==="스파이"&&type==="spy"){s.emit("privateResult",{text:"상대 직업: "+t.role});if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이가 마피아와 서로 정체를 확인했습니다.");}}
- if(type==="revive"&&p.used.revive)return;
  sendState(r);
  });
  s.on("special",({target})=>{
