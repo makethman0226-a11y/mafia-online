@@ -29,7 +29,7 @@ function render(){if(!state)return;const me=state.me;
  if(state.phase==="night"&&(me.role==="경찰"||me.role==="스파이")){label=me.role==="경찰"?"조사":"직업 조사";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&me.role==="기자"){label="기사 발표";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&me.role==="자경단"){label="대상 조사";fn=()=>socket.emit("special",{target:p.id})}
- if(label){const usedVote=state.phase==="day_vote"&&me?.hasVoted;const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;d.append(button(usedVote?"투표 완료":usedReporter?"오늘 발표 완료":label,fn,!!usedVote||!!usedReporter));}}list.append(d)});
+ if(label){const usedVote=state.phase==="day_vote"&&me?.hasVoted;const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedJudge=me?.role==="판사"&&state.phase==="day_vote"&&me.judgeUsed;d.append(button(usedVote?"투표 완료":usedReporter?"오늘 발표 완료":usedJudge?"판결 완료":label,fn,!!usedVote||!!usedReporter||!!usedJudge));}}list.append(d)});
  $("controls").innerHTML="";if(state.phase==="lobby"&&state.host===me?.id)$("controls").append(button("게임 시작",()=>socket.emit("start"),state.players.length<6));
  $("log").innerHTML="";(state.log||[]).forEach(x=>{const d=document.createElement("div");d.textContent=x.day+"일차 · "+x.text;$("log").append(d)});
  $("teamChatToggle").classList.toggle("hidden",!state.teamChatAllowed);
