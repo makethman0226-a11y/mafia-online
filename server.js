@@ -24,7 +24,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -158,7 +158,16 @@ function beginNightTurn(r,index=0){
    const others=alive(r).filter(x=>x.id!==b.id);
    let target=null,type=null;
    if(turn.role==="마피아"){target=botChoose(r,others.filter(x=>x.team!=="evil"));type="attack";}
-   if(turn.role==="자경단"){target=botChoose(r,others);type="vigilante";}
+   if(turn.role==="자경단"){
+    if(!b.used.vigilanteInvestigated){
+     target=botPickSuspect(r,b,others);
+     b.used.vigilanteInvestigated=true;b.vigilanteInvestigatedDay=r.day;
+     b.vigilanteTargetId=target?.team==="evil"?target.id:null;
+     if(target)r.botSuspicion[target.id]=(r.botSuspicion[target.id]||0)+(target.team==="evil"?2:0);
+    }else if(b.vigilanteTargetId&&r.day>b.vigilanteInvestigatedDay){
+     target=r.players.get(b.vigilanteTargetId);if(target?.alive)type="vigilante";else b.vigilanteTargetId=null;
+    }
+   }
    if(turn.role==="선교사"&&!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}
    if(turn.role==="경찰"){target=botPickSuspect(r,b,others);if(target&&target.team==="evil")r.botSuspicion[target.id]=(r.botSuspicion[target.id]||0)+2;}
    if(turn.role==="스파이"){target=botPickSuspect(r,b,others);if(target?.role==="마피아"){b.joined=true;target.joined=true;}}
@@ -281,6 +290,7 @@ io.on("connection",s=>{
  
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
+ if(type==="vigilante"&&(p.role!=="자경단"||!p.used.vigilanteInvestigated||!p.vigilanteTargetId||p.vigilanteTargetId!==t.id||r.day<=p.vigilanteInvestigatedDay))return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
  const abilityLabels={heal:"치료",attack:"공격",judge:"처벌",vigilante:"공격",convert:"전향",revive:"부활"};recordAbility(p,r,t,abilityLabels[type]||type);
  if(p.role==="경찰"&&type==="inspect")s.emit("privateResult",{text:t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다."});
@@ -302,6 +312,13 @@ io.on("connection",s=>{
    if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이와 마피아가 서로 정체를 확인했습니다.");}
    advanceNightTurn(r);
    return;
+  }
+  if(p.role==="자경단"&&r.phase==="night_vigilante"&&!p.used.vigilanteInvestigated){
+   p.used.vigilanteInvestigated=true;p.vigilanteInvestigatedDay=r.day;
+   p.vigilanteTargetId=t.team==="evil"?t.id:null;
+   recordAbility(p,r,t,"자경단 조사");
+   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 다음 밤에 이 대상을 공격할 수 있습니다.":"악인이 아닙니다. 자경단의 1회 조사는 끝났습니다.")});
+   sendState(r);advanceNightTurn(r);return;
   }
   if(p.role==="기자"&&r.phase==="day_discuss"&&r.day>1&&p.used.reporterDay!==r.day){
    p.used.reporterDay=r.day;recordAbility(p,r,t,"기자 발표");
