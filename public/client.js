@@ -1,10 +1,28 @@
 const socket=io();let state=null,teamMode=false,serverOffset=0;
 const chatMessages={public:[],team:[]};let privateNotice="",announcementNotice="";
 const $=id=>document.getElementById(id);
+const CONFIGURABLE_ROLES=["스파이","클러쳐","선교사","궁정광대","의사","경찰","판사","국회의원","기자","자경단","제사장"];
+function fillSettingSelect(select,from,to,value){select.innerHTML="";for(let n=from;n<=to;n++){const o=document.createElement("option");o.value=String(n);o.textContent=n+"명";select.append(o);}select.value=String(value);}
+function readSetupSettings(){return {maxPlayers:Number($("setupMaxPlayers").value),evilCount:Number($("setupEvilCount").value),excludedRoles:[...$("setupExcluded").querySelectorAll("input:checked")].map(x=>x.value)};}
+function buildSettingsEditor(container,settings,editable,prefix){
+ container.innerHTML="";
+ const title=document.createElement("h3");title.textContent=prefix==="setup"?"게임 설정":"방 설정";container.append(title);
+ const hint=document.createElement("p");hint.className="settings-hint";hint.textContent=editable?"게임 시작 전까지 방장이 변경할 수 있습니다.":"현재 적용된 설정";container.append(hint);
+ const row=document.createElement("div");row.className="settings-row";
+ const maxLabel=document.createElement("label");maxLabel.textContent="최대 인원";const max=document.createElement("select");max.id=prefix+"MaxPlayers";fillSettingSelect(max,6,15,settings?.maxPlayers||10);max.disabled=!editable;maxLabel.append(max);
+ const evilLabel=document.createElement("label");evilLabel.textContent="악인 수";const evil=document.createElement("select");evil.id=prefix+"EvilCount";fillSettingSelect(evil,1,Math.min(5,(settings?.maxPlayers||10)-2),settings?.evilCount||2);evil.disabled=!editable;evilLabel.append(evil);row.append(maxLabel,evilLabel);container.append(row);
+ const sub=document.createElement("div");sub.className="settings-hint";sub.textContent="제외할 직업";container.append(sub);
+ const checks=document.createElement("div");checks.className="role-checks";checks.id=prefix+"Excluded";
+ for(const role of CONFIGURABLE_ROLES){const label=document.createElement("label");label.className="role-check";const input=document.createElement("input");input.type="checkbox";input.value=role;input.checked=(settings?.excludedRoles||[]).includes(role);input.disabled=!editable;label.append(input,document.createTextNode(role));checks.append(label);}container.append(checks);
+ if(editable){max.addEventListener("change",()=>{fillSettingSelect(evil,1,Math.min(5,Number(max.value)-2),Math.min(Number(evil.value),Number(max.value)-2));});}
+ return {max,evil,checks};
+}
+function setupSettings(){const box=$("setupSettings");buildSettingsEditor(box,{maxPlayers:10,evilCount:2,excludedRoles:[]},true,"setup");}
 function err(t){$("error").textContent=t||""}
 $("rulesOpen").onclick=()=>$("rulesModal").classList.remove("hidden");
 $("rulesClose").onclick=()=>$("rulesModal").classList.add("hidden");
 $("rulesModal").addEventListener("click",e=>{if(e.target.id==="rulesModal")$("rulesModal").classList.add("hidden")});
+setupSettings();
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("rulesModal").classList.add("hidden")});
 
 function emitAction(type,id){socket.emit("action",{type,target:id})}
@@ -30,10 +48,10 @@ function roleSvg(role){
  return '<svg viewBox="0 0 64 64" fill="none" stroke="'+stroke+'" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="32" cy="32" r="28" stroke-opacity=".28"/>'+ROLE_SVG[role]+'</svg>';
 }
 function button(label,fn,disabled=false){const b=document.createElement("button");b.textContent=label;b.disabled=disabled;b.onclick=fn;return b}
-$("solo").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("soloStart",$("name").value)};
+$("solo").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("soloStart",{name:$("name").value,settings:readSetupSettings()})};
 $("quick").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("quickJoin",$("name").value)};
 socket.on("queueStatus",d=>{if(d.waiting){$("home").classList.remove("hidden");$("game").classList.add("hidden");err("자동 매칭 대기 중… 현재 대기 인원 "+d.count+"명 (최소 6명)");}else err("매칭 대기가 취소되었습니다.");});
-$("create").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("create",$("name").value)};
+$("create").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("create",{name:$("name").value,settings:readSetupSettings()})};
 $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("code").value})};
 socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];teamMode=false;if(d.aiMode){$("chatTitle").textContent="전체 대화 · AI 대련";$("message").placeholder="AI와 다른 플레이어에게 메시지 보내기";$("chatPanel").classList.remove("hidden");}else $("chatPanel").classList.add("hidden")});
 socket.on("errorMsg",err);
@@ -41,6 +59,7 @@ socket.on("privateResult",d=>{privateNotice=d.text;render()});
 socket.on("reporterAnnouncement",d=>{announcementNotice=d.text;render()});
 socket.on("state",s=>{if(state&&state.day!==s.day){privateNotice="";announcementNotice="";}state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
 function render(){if(!state)return;const me=state.me;
+ const lobbyBox=$("lobbySettings");if(state.phase==="lobby"&&state.host===me?.id){lobbyBox.classList.remove("hidden");buildSettingsEditor(lobbyBox,state.settings||{maxPlayers:10,evilCount:2,excludedRoles:[]},true,"lobby");const save=button("설정 저장",()=>{const max=Number($("lobbyMaxPlayers").value);socket.emit("updateRoomSettings",{maxPlayers:max,evilCount:Number($("lobbyEvilCount").value),excludedRoles:[...$("lobbyExcluded").querySelectorAll("input:checked")].map(x=>x.value)});},state.players.length>(state.settings?.maxPlayers||15));lobbyBox.append(save);}else{lobbyBox.classList.add("hidden");lobbyBox.innerHTML="";}
  $("phase").textContent=({lobby:"대기실",night_mafia:"밤 · 마피아 차례",night_vigilante:"밤 · 자경단 차례",night_missionary:"밤 · 선교사 차례",night_police:"밤 · 경찰 차례",night_spy:"밤 · 스파이 차례",night_doctor:"밤 · 의사 차례",night_priest:"밤 · 제사장 차례",day_discuss:"낮 · 토론",day_vote:"낮 · 투표",ended:"게임 종료"})[state.phase]||state.phase;
  $("role").textContent=me?.role?(me.isPresident?"대통령 · 국회의원":me.role):"대기 중";$("team").textContent=me?.team==="evil"?"악인 진영":me?.team==="good"?"선량한 진영":me?.team==="solo"?"개인 진영":"";$("roleIllustration").innerHTML=roleSvg(me?.role);
  const abilityNotice=me?.lastAbility&&me.lastAbility.day===state.day?"능력 사용 완료 · "+me.lastAbility.label+" → "+me.lastAbility.targetName:"";
@@ -60,7 +79,7 @@ function render(){if(!state)return;const me=state.me;
  if((state.phase==="night_police"&&me.role==="경찰")||(state.phase==="night_spy"&&me.role==="스파이")){label=me.role==="경찰"?"조사":"직업 조사";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&state.day>1&&me.role==="기자"){label="기사 발표";fn=()=>socket.emit("special",{target:p.id})}
  if(label){const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedVigilante=false;d.append(button(usedReporter?"오늘 발표 완료":usedVigilante?"오늘 조사 완료":label,fn,!!usedReporter||!!usedVigilante));}}list.append(d)});
- $("controls").innerHTML="";if(state.phase==="lobby"&&state.host===me?.id)$("controls").append(button("게임 시작",()=>socket.emit("start"),state.players.length<6));
+ $("controls").innerHTML="";if(state.phase==="lobby"&&state.host===me?.id)$("controls").append(button("게임 시작",()=>socket.emit("start"),state.players.length<6||state.players.length>(state.settings?.maxPlayers||15)));
  $("log").innerHTML="";(state.log||[]).forEach(x=>{const d=document.createElement("div");d.textContent=x.day+"일차 · "+x.text;$("log").append(d)});
  $("teamChatToggle").classList.toggle("hidden",!state.teamChatAllowed);
  $("teamChatToggle").setAttribute("aria-label",state.teamChatAllowed?"악인팀 대화 열기":"악인팀 대화 사용 불가");
