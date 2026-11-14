@@ -49,7 +49,7 @@ function assign(r){
  }
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
- r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+60000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
+ r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.botSuspicion={};r.endsAt=Date.now()+60000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
  log(r,"게임 시작! 낮 1일차 토론이 시작되었습니다.");
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
@@ -62,6 +62,23 @@ function endCheck(r){
 }
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
 function botChoose(r,arr=[]){return Array.isArray(arr)&&arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
+function botScore(r,p){
+ const votes=Object.values(r.votes||{}).filter(id=>id===p.id).length;
+ return (r.botSuspicion?.[p.id]||0)+votes*1.4+(p.alive?0:-100);
+}
+function botPickSuspect(r,bot,candidates){
+ const pool=candidates.filter(p=>p.id!==bot.id&&(bot.team!=="evil"||p.team!=="evil"));
+ if(!pool.length)return null;
+ return pool.sort((a,b)=>botScore(r,b)-botScore(r,a))[0];
+}
+function botLine(r,bot){
+ const living=alive(r),suspects=living.filter(p=>p.id!==bot.id).sort((a,b)=>botScore(r,b)-botScore(r,a));
+ const suspect=suspects[0],day=r.day;
+ if(suspect&&botScore(r,suspect)>0)return day+"일차인데 "+suspect.name+"님의 발언과 투표 흐름이 조금 수상해요. 근거를 더 들어보고 싶습니다.";
+ if(day===1)return "첫날은 정보가 적으니 다들 한 명씩 의견을 말해 주세요. 성급한 지목은 피하겠습니다.";
+ if(living.length<=4)return "생존자가 얼마 안 남았어요. 지금까지 나온 투표와 발언을 다시 확인해 봅시다.";
+ return "지금까지의 발언과 투표를 같이 살펴보죠. 의심하는 사람이 있다면 근거도 말해 주세요.";
+}
 function recordAbility(p,r,t,label){p.lastAbility={label,targetName:t.name,day:r.day,phase:r.phase};}
 const BOT_DISCUSSION_LINES=[
  "일단 서로 얘기 좀 들어보고 판단하자.",
@@ -81,7 +98,7 @@ function scheduleBotDiscussion(r){
  const bots=alive(r).filter(p=>p.isBot);
  if(!bots.length)return;
  const bot=botChoose(r,bots);
- const message=BOT_DISCUSSION_LINES[Math.floor(Math.random()*BOT_DISCUSSION_LINES.length)];
+ const message=botLine(r,bot);
  io.to(r.code).emit("chat",{name:bot.name,text:message,team:false});
  r.botChatCount++;
  r.nextBotChatAt=Date.now()+4500+Math.floor(Math.random()*5000);
@@ -124,6 +141,8 @@ function beginNightTurn(r,index=0){
    if(turn.role==="마피아"){target=botChoose(r,others.filter(x=>x.team!=="evil"));type="attack";}
    if(turn.role==="자경단"){if(b.used.vigilanteTarget){target=r.players.get(b.used.vigilanteTarget);type="vigilante";}else{target=botChoose(r,others);if(target){b.used.vigilanteTarget=target.id;b.used.vigilanteInvestigatedDay=r.day;}}}
    if(turn.role==="선교사"&&!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}
+   if(turn.role==="경찰"){target=botPickSuspect(r,b,others);if(target&&target.team==="evil")r.botSuspicion[target.id]=(r.botSuspicion[target.id]||0)+2;}
+   if(turn.role==="스파이"){target=botPickSuspect(r,b,others);if(target?.role==="마피아"){b.joined=true;target.joined=true;}}
    if(turn.role==="의사"){target=botChoose(r,others);type="heal";}
    if(turn.role==="제사장"&&!b.used.revive){target=botChoose(r,[...r.players.values()].filter(x=>!x.alive));type="revive";}
    if(target&&type)r.actions[type+":"+b.id]={type,actor:b.id,target:target.id};
@@ -157,7 +176,7 @@ function nightResolve(r){
  r.phase="day_discuss";r.endsAt=Date.now()+60000;r.actions={};r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
 function nextVote(r){r.phase="day_vote";r.votes={};r.resolvingVote=false;r.endsAt=Date.now()+120000;log(r,"투표가 시작되었습니다. 제한 시간은 120초입니다.");sendState(r);}
-function fillBotVotes(r){if(!r.aiMode)return;for(const b of alive(r).filter(p=>p.isBot&&!r.votes[p.id])){const candidates=alive(r).filter(p=>p.id!==b.id);let choices=candidates;if(b.team==="evil")choices=candidates.filter(p=>p.team!=="evil");const target=botChoose(r,choices);if(target)r.votes[b.id]=target.id;}}
+function fillBotVotes(r){if(!r.aiMode)return;for(const b of alive(r).filter(p=>p.isBot&&!r.votes[p.id])){const candidates=alive(r).filter(p=>p.id!==b.id);const target=botPickSuspect(r,b,candidates);if(target)r.votes[b.id]=target.id;}}
 function allAliveVoted(r){const voters=alive(r).filter(p=>p.connected!==false);return voters.length>0&&voters.every(p=>!!r.votes[p.id]);}
 function resolveVote(r){
  if(r.phase!=="day_vote"||r.resolvingVote)return;r.resolvingVote=true;
@@ -283,7 +302,14 @@ io.on("connection",s=>{
  s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
  s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=cleanMessage(msg);if(!message)return;
  if(team){if(!joinedEvil(p))return;for(const q of r.players.values())if(joinedEvil(q))io.to(q.id).emit("chat",{name:p.name,text:message,team:true});}
- else{if(!p.alive||r.phase==="ended")return;io.to(r.code).emit("chat",{name:p.name,text:message,team:false});}
+ else{if(!p.alive||r.phase==="ended")return;
+  if(r.aiMode&&/(수상|의심|마피아|악인|거짓말|투표|몰아|이상하)/.test(message)){
+   for(const b of alive(r).filter(x=>x.isBot)){
+    if(message.includes(b.name))r.botSuspicion[b.id]=(r.botSuspicion[b.id]||0)+2;
+   }
+  }
+  io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
+ }
  });
  s.on("disconnect",()=>{removeFromQueue(s.id);for(const r of rooms.values()){const p=r.players.get(s.id);if(p&&r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;sendState(r);}else if(p){p.connected=false;if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}});
 });
