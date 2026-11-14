@@ -76,6 +76,45 @@ function runBotNight(r){
   if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
  }
 }
+
+const NIGHT_TURNS=[
+ {role:"마피아",phase:"night_mafia"},
+ {role:"자경단",phase:"night_vigilante"},
+ {role:"선교사",phase:"night_missionary"},
+ {role:"경찰",phase:"night_police"},
+ {role:"스파이",phase:"night_spy"},
+ {role:"의사",phase:"night_doctor"},
+ {role:"제사장",phase:"night_priest"}
+];
+const NIGHT_PHASE_BY_TYPE={attack:"night_mafia",vigilante:"night_vigilante",convert:"night_missionary",heal:"night_doctor",revive:"night_priest"};
+function beginNightTurn(r,index=0){
+ if(index>=NIGHT_TURNS.length)return nightResolve(r);
+ const turn=NIGHT_TURNS[index],members=alive(r).filter(p=>p.role===turn.role);
+ r.nightTurnIndex=index;
+ if(!members.length)return beginNightTurn(r,index+1);
+ r.phase=turn.phase;r.endsAt=Date.now()+15000;
+ const humans=members.filter(p=>!p.isBot);
+ if(!humans.length){
+  for(const b of members){
+   const others=alive(r).filter(x=>x.id!==b.id);
+   let target=null,type=null;
+   if(turn.role==="마피아"){target=botChoose(r,others.filter(x=>x.team!=="evil"));type="attack";}
+   if(turn.role==="자경단"){target=botChoose(r,others.filter(x=>x.team==="evil"));type="vigilante";if(target)b.used.vigilanteTarget=target.id;}
+   if(turn.role==="선교사"&&!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}
+   if(turn.role==="의사"){target=botChoose(r,others);type="heal";}
+   if(turn.role==="제사장"&&!b.used.revive){target=botChoose(r,[...r.players.values()].filter(x=>!x.alive));type="revive";}
+   if(target&&type)r.actions[type+":"+b.id]={type,actor:b.id,target:target.id};
+  }
+  return beginNightTurn(r,index+1);
+ }
+ sendState(r);
+}
+function advanceNightTurn(r){
+ if(!r||!String(r.phase).startsWith("night_"))return;
+ beginNightTurn(r,r.nightTurnIndex+1);
+}
+function startNight(r){r.actions={};r.votes={};beginNightTurn(r,0);}
+
 function nightResolve(r){
  const act=r.actions, deaths=[];
  const markDead=(p,reason)=>{if(!p?.alive||p.id===r.presidentId)return false;p.alive=false;const reveal=p.team==="evil"?" (직업: "+revealedRole(p)+")":"";deaths.push(p.name+"님"+(reason||"이 탈락했습니다.")+reveal);return true;};
