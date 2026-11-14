@@ -61,7 +61,8 @@ function endCheck(r){
  return null;
 }
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
-function botChoose(r,arr){return arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
+function botChoose(r,arr=[]){return Array.isArray(arr)&&arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
+function recordAbility(p,r,t,label){p.lastAbility={label,targetName:t.name,day:r.day,phase:r.phase};}
 function runBotNight(r){
  if(!r.aiMode)return;
  const living=alive(r), bots=living.filter(p=>p.isBot);
@@ -73,7 +74,7 @@ function runBotNight(r){
   if(b.role==="판사"){const t=botChoose(r,others);if(t)r.actions["judge:"+b.id]={type:"judge",actor:b.id,target:t.id};}
   if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}
   if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
-  if(b.role==="제사장"&&!b.used.revive){const t=botChoose([...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
+  if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
  }
 }
 function nightResolve(r){
@@ -172,6 +173,7 @@ io.on("connection",s=>{
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
+ const abilityLabels={heal:"치료",attack:"공격",judge:"처벌",vigilante:"공격",convert:"전향",revive:"부활"};recordAbility(p,r,t,abilityLabels[type]||type);
  if(p.role==="경찰"&&type==="inspect")s.emit("privateResult",{text:t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다."});
  if(p.role==="스파이"&&type==="spy"){s.emit("privateResult",{text:"상대 직업: "+t.role});if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이가 마피아와 서로 정체를 확인했습니다.");}}
  if(type==="revive"&&p.used.revive)return;
@@ -181,20 +183,20 @@ io.on("connection",s=>{
   const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);
   if(!r||!p?.alive||!t?.alive||p.id===t.id)return;
   if(p.role==="경찰"&&r.phase==="night"&&p.used.policeNight!==r.day){
-   p.used.policeNight=r.day;
+   p.used.policeNight=r.day;recordAbility(p,r,t,"경찰 조사");
    s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다.")});
    sendState(r);
    return;
   }
   if(p.role==="스파이"&&r.phase==="night"&&p.used.spyNight!==r.day){
-   p.used.spyNight=r.day;
+   p.used.spyNight=r.day;recordAbility(p,r,t,"스파이 조사");
    s.emit("privateResult",{text:t.name+"님의 직업: "+revealedRole(t)});
    if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이와 마피아가 서로 정체를 확인했습니다.");}
    sendState(r);
    return;
   }
   if(p.role==="기자"&&r.phase==="day_discuss"&&p.used.reporterDay!==r.day){
-   p.used.reporterDay=r.day;
+   p.used.reporterDay=r.day;recordAbility(p,r,t,"기자 발표");
    const announcement="기자 발표: "+t.name+"님의 직업은 "+revealedRole(t)+"입니다.";
    log(r,announcement);
    io.to(r.code).emit("reporterAnnouncement",{text:announcement});
@@ -202,7 +204,7 @@ io.on("connection",s=>{
    return;
   }
   if(p.role==="자경단"&&r.phase==="day_discuss"&&p.used.vigilanteInspectDay!==r.day){
-   p.used.vigilanteInspectDay=r.day;
+   p.used.vigilanteInspectDay=r.day;recordAbility(p,r,t,"대상 조사");
    s.emit("privateResult",{text:t.team==="evil"?"악인입니다. 밤에 행동할 수 있습니다.":"악인이 아닙니다."});
    sendState(r);
   }
