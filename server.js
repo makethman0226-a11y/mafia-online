@@ -24,7 +24,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
