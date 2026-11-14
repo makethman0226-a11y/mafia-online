@@ -25,7 +25,7 @@ function publicState(r){
 }
 function viewFor(r,p){
  const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
- st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
+ st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
 }
@@ -189,7 +189,7 @@ function canTakeNightTurn(r,p,role){
  if(role==="선교사")return !p.used.convert;
  if(role==="경찰")return p.used.policeNight!==r.day;
  if(role==="스파이")return p.used.spyNight!==r.day;
- if(role==="제사장")return !p.used.revive&&[...r.players.values()].some(x=>!x.alive);
+ if(role==="제사장")return !p.used.revive&&[...r.players.values()].some(x=>!x.alive&&x.connected!==false);
  return true;
 }
 function advanceNightTurn(r){
@@ -294,7 +294,7 @@ io.on("connection",s=>{
  }
  if(!String(r.phase).startsWith("night_"))return;
  if(type!=="revive"&&!t.alive)return;
- if(type==="revive"&&(t.alive||p.used.revive))return;
+ if(type==="revive"&&(t.alive||t.connected===false||p.used.revive))return;
  const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id||r.phase!==NIGHT_PHASE_BY_TYPE[type])return;
  if(type==="attack"&&t.team==="evil"){s.emit("errorMsg","마피아는 같은 악인 팀을 공격할 수 없습니다.");return;}
