@@ -56,8 +56,8 @@ test("사용한 능력의 확인 문구가 다음 밤 차례로 넘어가도 표
   assert.match(client, /me\.lastAbility\.day===state\.day\?"능력 사용 완료/);
 });
 
-test("직업 중복 배정으로 같은 밤 차례가 사라지지 않도록 선량 직업은 중복되지 않는다", () => {
-  assert.match(server, /if\(goodRoles\.length\)roles\.push\(goodRoles\.shift\(\)\)/);
+test("선량 직업은 중복되지 않고 시민은 기본 직업으로 유지한다", () => {
+  assert.match(server, /const goodRoles=\["의사","경찰","판사","국회의원","기자","자경단","제사장"\]\.filter/);
   assert.match(server, /else roles\.push\("시민"\)/);
 });
 
@@ -65,4 +65,23 @@ test("이미 사용한 능력과 행동 불가능한 부활 대상은 밤 차례
   assert.match(server, /function canTakeNightTurn\(r,p,role\)/);
   assert.match(server, /return !p\.used\.revive&&\[\.\.\.r\.players\.values\(\)\]\.some\(x=>!x\.alive&&x\.connected!==false\)/);
   assert.match(server, /t\.connected===false\|\|p\.used\.revive/);
+});
+
+
+test("방 설정은 최대 인원·악인 수·제외 직업을 검증하고 직업 배정에 반영한다", () => {
+  assert.match(server, /function normalizeSettings\(raw=\{\},playerCount=6\)/);
+  assert.match(server, /maxPlayers,evilCount,excludedRoles/);
+  assert.match(server, /const evilCount=Math.max\(1,Math.min\(r.settings.evilCount,n-2\)\)/);
+  assert.match(server, /filter\(x=>!excluded.has\(x\)\)/);
+  assert.match(server, /r.settings=normalizeSettings\(r.settings,n\)/);
+});
+
+test("온라인 방과 AI 대련 모두 같은 설정을 전달하며 대기실에서 수정할 수 있다", () => {
+  assert.match(client, /socket.emit\("create",\{name:\$\("name"\)\.value,settings:readSetupSettings\(\)\}\)/);
+  assert.match(client, /socket.emit\("soloStart",\{name:\$\("name"\)\.value,settings:readSetupSettings\(\)\}\)/);
+  assert.match(client, /socket.emit\("updateRoomSettings"/);
+  assert.match(server, /s.on\("updateRoomSettings"/);
+  assert.match(server, /r.players.size>=\(r.settings\?\.maxPlayers\|\|15\)/);
+  assert.match(html, /id="setupMaxPlayers"/);
+  assert.match(html, /id="lobbySettings"/);
 });
