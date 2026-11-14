@@ -39,7 +39,7 @@ socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.rem
 socket.on("errorMsg",err);
 socket.on("privateResult",d=>{privateNotice=d.text;render()});
 socket.on("reporterAnnouncement",d=>{announcementNotice=d.text;render()});
-socket.on("state",s=>{if(state&&(state.phase!==s.phase||state.day!==s.day)){privateNotice="";announcementNotice="";}state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
+socket.on("state",s=>{if(state&&state.day!==s.day){privateNotice="";announcementNotice="";}state=s;if(Number.isFinite(s.serverNow))serverOffset=s.serverNow-Date.now();render()});
 function render(){if(!state)return;const me=state.me;
  $("phase").textContent=({lobby:"대기실",night_mafia:"밤 · 마피아 차례",night_vigilante:"밤 · 자경단 차례",night_missionary:"밤 · 선교사 차례",night_police:"밤 · 경찰 차례",night_spy:"밤 · 스파이 차례",night_doctor:"밤 · 의사 차례",night_priest:"밤 · 제사장 차례",day_discuss:"낮 · 토론",day_vote:"낮 · 투표",ended:"게임 종료"})[state.phase]||state.phase;
  $("role").textContent=me?.role?(me.isPresident?"대통령 · 국회의원":me.role):"대기 중";$("team").textContent=me?.team==="evil"?"악인 진영":me?.team==="good"?"선량한 진영":me?.team==="solo"?"개인 진영":"";$("roleIllustration").innerHTML=roleSvg(me?.role);
