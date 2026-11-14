@@ -24,7 +24,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,vigilanteInspectUsed:p.used?.vigilanteInspectDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,vigilanteTargetId:p.used?.vigilanteTarget||null,lastAbility:p.lastAbility||null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,vigilanteInspectUsed:p.used?.vigilanteInspectDay===r.day,vigilanteTargetId:p.used?.vigilanteTarget||null,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,vigilanteTargetId:p.used?.vigilanteTarget||null,lastAbility:p.lastAbility||null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -94,7 +94,7 @@ function runBotNight(r){
   if(!others.length)continue;
   if(b.role==="마피아"&&!Object.values(r.actions).some(x=>x.type==="attack")){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["attack:"+b.id]={type:"attack",actor:b.id,target:t.id};}
   if(b.role==="의사"){const t=botChoose(r,others);if(t)r.actions["heal:"+b.id]={type:"heal",actor:b.id,target:t.id};}
-  if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t){b.used.vigilanteTarget=t.id;r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}}
+  if(b.role==="자경단"){if(b.used.vigilanteTarget){const t=r.players.get(b.used.vigilanteTarget);if(t?.alive)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}else{const t=botChoose(r,others);if(t){b.used.vigilanteTarget=t.id;b.used.vigilanteInvestigatedDay=r.day;}}}
   if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
   if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
  }
@@ -122,7 +122,7 @@ function beginNightTurn(r,index=0){
    const others=alive(r).filter(x=>x.id!==b.id);
    let target=null,type=null;
    if(turn.role==="마피아"){target=botChoose(r,others.filter(x=>x.team!=="evil"));type="attack";}
-   if(turn.role==="자경단"){target=botChoose(r,others.filter(x=>x.team==="evil"));type="vigilante";if(target)b.used.vigilanteTarget=target.id;}
+   if(turn.role==="자경단"){if(b.used.vigilanteTarget){target=r.players.get(b.used.vigilanteTarget);type="vigilante";}else{target=botChoose(r,others);if(target){b.used.vigilanteTarget=target.id;b.used.vigilanteInvestigatedDay=r.day;}}}
    if(turn.role==="선교사"&&!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}
    if(turn.role==="의사"){target=botChoose(r,others);type="heal";}
    if(turn.role==="제사장"&&!b.used.revive){target=botChoose(r,[...r.players.values()].filter(x=>!x.alive));type="revive";}
@@ -145,12 +145,12 @@ function nightResolve(r){
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
  if(target&&target!==save){const victim=r.players.get(target);if(markDead(victim,"이 밤에 탈락했습니다."))log(r,victim.name+"님이 밤에 탈락했습니다.");}
  const vigil=Object.values(act).find(x=>x.type==="vigilante");
- if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){if(markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다."))log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
+ if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){if(markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다."))log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}if(v?.used){v.used.vigilanteTarget=null;v.used.vigilanteInvestigatedDay=null;}}
  for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t||(x.type!=="revive"&&!t.alive))continue;
   if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){markDead(p,"이 밤에 전향 실패로 탈락했습니다.");log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
   if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;const deathIndex=deaths.findIndex(d=>d.startsWith(t.name+"님"));if(deathIndex>=0)deaths.splice(deathIndex,1);p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
  }
- for(const p of r.players.values())if(p.role==="자경단")p.used.vigilanteTarget=null;
+
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
  io.to(r.code).emit("nightResult",{text:nightText});
  const w=endCheck(r);if(w)return finish(r,w);
@@ -240,7 +240,7 @@ io.on("connection",s=>{
  if(type==="revive"&&(t.alive||p.used.revive))return;
  const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id||r.phase!==NIGHT_PHASE_BY_TYPE[type])return;
- if(type==="vigilante"&&p.used.vigilanteTarget!==t.id)return;
+ if(type==="vigilante"&&(p.used.vigilanteTarget!==t.id||p.used.vigilanteInvestigatedDay>=r.day))return;
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
@@ -273,11 +273,7 @@ io.on("connection",s=>{
    sendState(r);
    return;
   }
-  if(p.role==="자경단"&&r.phase==="day_discuss"&&r.day>1&&p.used.vigilanteInspectDay!==r.day){
-   p.used.vigilanteInspectDay=r.day;p.used.vigilanteTarget=t.team==="evil"?t.id:null;recordAbility(p,r,t,"정체 조사");
-   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 오늘 밤 이 사람을 공격할 수 있습니다.":"악인이 아닙니다.")});
-   sendState(r);
-  }
+
  });
  s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
  s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=cleanMessage(msg);if(!message)return;
