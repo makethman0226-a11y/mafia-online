@@ -49,7 +49,10 @@ function render(){if(!state)return;const me=state.me;
  const list=$("players");list.innerHTML="";
  state.players.forEach(p=>{const d=document.createElement("div");d.className="player"+(!p.alive?" dead":"");if(p.role){const art=document.createElement("span");art.className="player-role-icon";art.innerHTML=roleSvg(p.role);d.append(art);}const name=document.createElement("span");name.textContent=p.name+(p.id===me?.id?" (나)":"")+(p.role?" · "+p.role:"");d.append(name);const isNight=String(state.phase).startsWith("night_");const priestReviveTarget=state.phase==="night_priest"&&me?.role==="제사장";
  if(me?.alive&&p.id!==me.id&&(priestReviveTarget?!p.alive:p.alive)){let label=null,fn=null;
- if(isNight){const rolePhase={마피아:"night_mafia",자경단:"night_vigilante",선교사:"night_missionary",의사:"night_doctor",제사장:"night_priest"};const map={의사:["치료","heal"],마피아:["공격","attack"],선교사:["전향","convert"],제사장:["부활","revive"]};if(state.phase===rolePhase[me.role]&&map[me.role]){label=map[me.role][0];fn=()=>emitAction(map[me.role][1],p.id)}if(state.phase==="night_vigilante"&&me.role==="자경단"){label="공격";fn=()=>emitAction("vigilante",p.id)}}
+ if(isNight){const rolePhase={마피아:"night_mafia",자경단:"night_vigilante",선교사:"night_missionary",의사:"night_doctor",제사장:"night_priest"};const map={의사:["치료","heal"],마피아:["공격","attack"],선교사:["전향","convert"],제사장:["부활","revive"]};if(state.phase===rolePhase[me.role]&&map[me.role]){label=map[me.role][0];fn=()=>emitAction(map[me.role][1],p.id)}if(state.phase==="night_vigilante"&&me.role==="자경단"){
+  if(!me.vigilanteInvestigated){label="1회 조사";fn=()=>socket.emit("special",{target:p.id})}
+  else if(me.vigilanteTargetId===p.id&&state.day>me.vigilanteInvestigatedDay){label="조사한 악인 공격";fn=()=>emitAction("vigilante",p.id)}
+ }}
  if(state.phase==="day_vote"){
   if(me.role==="판사"){d.append(button(me.judgeUsed?"판결 완료":"판결",()=>emitAction("judge",p.id),!!me.judgeUsed));}
   d.append(button(me.hasVoted?"투표 완료":"투표",()=>socket.emit("vote",p.id),!!me.hasVoted));
