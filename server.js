@@ -199,7 +199,7 @@ function resolveVote(r){
  log(r,"밤이 되었습니다. 마피아부터 차례대로 행동합니다.");startNight(r);
 }
 setInterval(()=>{for(const r of rooms.values()){if(r.phase==="day_discuss"&&r.aiMode)scheduleBotDiscussion(r);if(!r.endsAt||Date.now()<r.endsAt)continue;
- if(String(r.phase).startsWith("night_"))advanceNightTurn(r);else if(r.phase==="day_discuss"){if(r.day===1){log(r,"첫째 날 토론이 끝났습니다. 밤이 시작됩니다.");startNight(r);}else nextVote(r);}else if(r.phase==="day_vote")resolveVote(r);
+ if(String(r.phase).startsWith("night_"))advanceNightTurn(r);else if(r.phase==="day_discuss"){if(r.day===1){log(r,"첫째 날 토론이 끝났습니다. 밤이 시작됩니다.");r.day++;startNight(r);}else nextVote(r);}else if(r.phase==="day_vote")resolveVote(r);
 }},500);
 function removeFromQueue(id){const i=matchmakingQueue.findIndex(x=>x.id===id);if(i>=0)matchmakingQueue.splice(i,1);}
 function runMatchmaking(){
