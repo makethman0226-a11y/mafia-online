@@ -302,7 +302,7 @@ io.on("connection",s=>{
   if(!r||!p?.alive||!t?.alive||p.id===t.id)return;
     if(p.role==="경찰"&&r.phase==="night_police"&&p.used.policeNight!==r.day){
    p.used.policeNight=r.day;recordAbility(p,r,t,"경찰 조사");
-   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인 진영입니다.":"악인 진영이 아닙니다.")});
+   s.emit("privateResult",{text:t.name+"님의 직업은 "+revealedRole(t)+"입니다. (경찰에게만 공개)"});
    advanceNightTurn(r);
    return;
   }
