@@ -45,12 +45,14 @@ function render(){if(!state)return;const me=state.me;
  state.players.forEach(p=>{const d=document.createElement("div");d.className="player"+(!p.alive?" dead":"");if(p.role){const art=document.createElement("span");art.className="player-role-icon";art.innerHTML=roleSvg(p.role);d.append(art);}const name=document.createElement("span");name.textContent=p.name+(p.id===me?.id?" (나)":"")+(p.role?" · "+p.role:"");d.append(name);const priestReviveTarget=state.phase==="night"&&me?.role==="제사장";
  if(me?.alive&&p.id!==me.id&&(priestReviveTarget?!p.alive:p.alive)){let label=null,fn=null;
  if(state.phase==="night"){const map={의사:["치료","heal"],마피아:["공격","attack"],선교사:["전향","convert"],제사장:["부활","revive"]};if(map[me.role]){label=map[me.role][0];fn=()=>emitAction(map[me.role][1],p.id)}if(me.role==="자경단"&&me.vigilanteTargetId===p.id){label="악인 처단";fn=()=>emitAction("vigilante",p.id)}}
- if(state.phase==="day_vote"&&me.role==="판사"){label=me.judgeUsed?"판결 완료":"판결";fn=()=>emitAction("judge",p.id);}
- if(state.phase==="day_vote"){label="투표";fn=()=>socket.emit("vote",p.id)}
+ if(state.phase==="day_vote"){
+  if(me.role==="판사"){d.append(button(me.judgeUsed?"판결 완료":"판결",()=>emitAction("judge",p.id),!!me.judgeUsed));}
+  d.append(button(me.hasVoted?"투표 완료":"투표",()=>socket.emit("vote",p.id),!!me.hasVoted));
+ }
  if(state.phase==="night"&&(me.role==="경찰"||me.role==="스파이")){label=me.role==="경찰"?"조사":"직업 조사";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&me.role==="기자"){label="기사 발표";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&me.role==="자경단"){label=me.vigilanteInspectUsed?"오늘 조사 완료":"정체 조사";fn=()=>socket.emit("special",{target:p.id})}
- if(label){const usedVote=state.phase==="day_vote"&&me?.hasVoted;const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedJudge=me?.role==="판사"&&state.phase==="day_vote"&&me.judgeUsed;const usedVigilante=me?.role==="자경단"&&state.phase==="day_discuss"&&me.vigilanteInspectUsed;d.append(button(usedVote?"투표 완료":usedReporter?"오늘 발표 완료":usedJudge?"판결 완료":usedVigilante?"오늘 조사 완료":label,fn,!!usedVote||!!usedReporter||!!usedJudge||!!usedVigilante));}}list.append(d)});
+ if(label){const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedVigilante=me?.role==="자경단"&&state.phase==="day_discuss"&&me.vigilanteInspectUsed;d.append(button(usedReporter?"오늘 발표 완료":usedVigilante?"오늘 조사 완료":label,fn,!!usedReporter||!!usedVigilante));}}list.append(d)});
  $("controls").innerHTML="";if(state.phase==="lobby"&&state.host===me?.id)$("controls").append(button("게임 시작",()=>socket.emit("start"),state.players.length<6));
  $("log").innerHTML="";(state.log||[]).forEach(x=>{const d=document.createElement("div");d.textContent=x.day+"일차 · "+x.text;$("log").append(d)});
  $("teamChatToggle").classList.toggle("hidden",!state.teamChatAllowed);
