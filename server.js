@@ -130,6 +130,7 @@ const NIGHT_PHASE_BY_TYPE={attack:"night_mafia",vigilante:"night_vigilante",conv
 function beginNightTurn(r,index=0){
  if(index>=NIGHT_TURNS.length)return nightResolve(r);
  const turn=NIGHT_TURNS[index],members=alive(r).filter(p=>p.role===turn.role);
+ if(turn.role==="자경단")for(const p of members){const target=p.used.vigilanteTarget&&r.players.get(p.used.vigilanteTarget);if(p.used.vigilanteTarget&&(!target||!target.alive)){p.used.vigilanteTarget=null;p.used.vigilanteInvestigatedDay=null;}}
  r.nightTurnIndex=index;
  if(!members.length)return beginNightTurn(r,index+1);
  r.phase=turn.phase;r.endsAt=Date.now()+15000;
