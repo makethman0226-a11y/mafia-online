@@ -2,6 +2,11 @@ const socket=io();let state=null,teamMode=false,serverOffset=0;
 const chatMessages={public:[],team:[]};let privateNotice="",announcementNotice="";
 const $=id=>document.getElementById(id);
 function err(t){$("error").textContent=t||""}
+$("rulesOpen").onclick=()=>$("rulesModal").classList.remove("hidden");
+$("rulesClose").onclick=()=>$("rulesModal").classList.add("hidden");
+$("rulesModal").addEventListener("click",e=>{if(e.target.id==="rulesModal")$("rulesModal").classList.add("hidden")});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("rulesModal").classList.add("hidden")});
+
 function emitAction(type,id){socket.emit("action",{type,target:id})}
 const ROLE_SVG={
 "시민":'<circle cx="32" cy="23" r="9"/><path d="M14 54c1-11 8-17 18-17s17 6 18 17"/>',
