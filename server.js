@@ -49,7 +49,7 @@ function assign(r){
  }
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
- r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+60000;
+ r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+60000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
  log(r,"게임 시작! 낮 1일차 토론이 시작되었습니다.");
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
@@ -63,6 +63,29 @@ function endCheck(r){
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
 function botChoose(r,arr=[]){return Array.isArray(arr)&&arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
 function recordAbility(p,r,t,label){p.lastAbility={label,targetName:t.name,day:r.day,phase:r.phase};}
+const BOT_DISCUSSION_LINES=[
+ "일단 서로 얘기 좀 들어보고 판단하자.",
+ "아직 단서가 부족한 것 같은데 다른 사람 의견은?",
+ "첫날이라 정보가 없네. 말투나 반응을 잘 보자.",
+ "무작정 몰아가지는 말고 근거를 말해 줘.",
+ "나는 지금은 조금 더 토론해 보는 게 좋겠어.",
+ "방금 말한 내용이 좀 걸리는데 이유를 설명해 줄래?",
+ "다들 너무 조용한데 한 명씩 의견 내보자.",
+ "지금은 확신하기 어려워. 투표 전까지 더 들어볼게."
+];
+function scheduleBotDiscussion(r){
+ if(!r.aiMode||r.phase!=="day_discuss")return;
+ if(!r.botChatCount)r.botChatCount=0;
+ if(!r.nextBotChatAt)r.nextBotChatAt=Date.now()+2500+Math.floor(Math.random()*2500);
+ if(Date.now()<r.nextBotChatAt||r.botChatCount>=5)return;
+ const bots=alive(r).filter(p=>p.isBot);
+ if(!bots.length)return;
+ const bot=botChoose(r,bots);
+ const message=BOT_DISCUSSION_LINES[Math.floor(Math.random()*BOT_DISCUSSION_LINES.length)];
+ io.to(r.code).emit("chat",{name:bot.name,text:message,team:false});
+ r.botChatCount++;
+ r.nextBotChatAt=Date.now()+4500+Math.floor(Math.random()*5000);
+}
 function runBotNight(r){
  if(!r.aiMode)return;
  const living=alive(r), bots=living.filter(p=>p.isBot);
@@ -131,7 +154,7 @@ function nightResolve(r){
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
  io.to(r.code).emit("nightResult",{text:nightText});
  const w=endCheck(r);if(w)return finish(r,w);
- r.phase="day_discuss";r.endsAt=Date.now()+60000;r.actions={};log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
+ r.phase="day_discuss";r.endsAt=Date.now()+60000;r.actions={};r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
 function nextVote(r){r.phase="day_vote";r.votes={};r.resolvingVote=false;r.endsAt=Date.now()+120000;log(r,"투표가 시작되었습니다. 제한 시간은 120초입니다.");sendState(r);}
 function fillBotVotes(r){if(!r.aiMode)return;for(const b of alive(r).filter(p=>p.isBot&&!r.votes[p.id])){const candidates=alive(r).filter(p=>p.id!==b.id);let choices=candidates;if(b.team==="evil")choices=candidates.filter(p=>p.team!=="evil");const target=botChoose(r,choices);if(target)r.votes[b.id]=target.id;}}
@@ -175,8 +198,8 @@ function resolveVote(r){
  if(r.day>=4&&!r.presidentId){const politician=alive(r).find(p=>p.role==="국회의원");if(politician){r.presidentId=politician.id;log(r,politician.name+"님이 대통령이 되었습니다. 이제 탈락하지 않습니다.");}}
  log(r,"밤이 되었습니다. 마피아부터 차례대로 행동합니다.");startNight(r);
 }
-setInterval(()=>{for(const r of rooms.values()){if(!r.endsAt||Date.now()<r.endsAt)continue;
- if(String(r.phase).startsWith("night_"))advanceNightTurn(r);else if(r.phase==="day_discuss")nextVote(r);else if(r.phase==="day_vote")resolveVote(r);
+setInterval(()=>{for(const r of rooms.values()){if(r.phase==="day_discuss"&&r.aiMode)scheduleBotDiscussion(r);if(!r.endsAt||Date.now()<r.endsAt)continue;
+ if(String(r.phase).startsWith("night_"))advanceNightTurn(r);else if(r.phase==="day_discuss"){if(r.day===1){log(r,"첫째 날 토론이 끝났습니다. 밤이 시작됩니다.");startNight(r);}else nextVote(r);}else if(r.phase==="day_vote")resolveVote(r);
 }},500);
 function removeFromQueue(id){const i=matchmakingQueue.findIndex(x=>x.id===id);if(i>=0)matchmakingQueue.splice(i,1);}
 function runMatchmaking(){
@@ -242,7 +265,7 @@ io.on("connection",s=>{
    advanceNightTurn(r);
    return;
   }
-  if(p.role==="기자"&&r.phase==="day_discuss"&&p.used.reporterDay!==r.day){
+  if(p.role==="기자"&&r.phase==="day_discuss"&&r.day>1&&p.used.reporterDay!==r.day){
    p.used.reporterDay=r.day;recordAbility(p,r,t,"기자 발표");
    const announcement="기자 발표: "+t.name+"님의 직업은 "+revealedRole(t)+"입니다.";
    log(r,announcement);
@@ -250,13 +273,13 @@ io.on("connection",s=>{
    sendState(r);
    return;
   }
-  if(p.role==="자경단"&&r.phase==="day_discuss"&&p.used.vigilanteInspectDay!==r.day){
+  if(p.role==="자경단"&&r.phase==="day_discuss"&&r.day>1&&p.used.vigilanteInspectDay!==r.day){
    p.used.vigilanteInspectDay=r.day;p.used.vigilanteTarget=t.team==="evil"?t.id:null;recordAbility(p,r,t,"정체 조사");
    s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 오늘 밤 이 사람을 공격할 수 있습니다.":"악인이 아닙니다.")});
    sendState(r);
   }
  });
- s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
+ s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
  s.on("chat",({text:msg,team})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||!msg)return;const message=cleanMessage(msg);if(!message)return;
  if(team){if(!joinedEvil(p))return;for(const q of r.players.values())if(joinedEvil(q))io.to(q.id).emit("chat",{name:p.name,text:message,team:true});}
  else{if(!p.alive||r.phase==="ended")return;io.to(r.code).emit("chat",{name:p.name,text:message,team:false});}
