@@ -33,7 +33,7 @@ function button(label,fn,disabled=false){const b=document.createElement("button"
 $("solo").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("soloStart",$("name").value)};
 $("quick").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("quickJoin",$("name").value)};
 socket.on("queueStatus",d=>{if(d.waiting){$("home").classList.remove("hidden");$("game").classList.add("hidden");err("자동 매칭 대기 중… 현재 대기 인원 "+d.count+"명 (최소 6명)");}else err("매칭 대기가 취소되었습니다.");});
-$("create").onclick=()=>{err("");socket.emit("create",$("name").value)};
+$("create").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임을 먼저 입력해 주세요.");socket.emit("create",$("name").value)};
 $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("code").value})};
 socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];teamMode=false;if(d.aiMode){$("chatTitle").textContent="전체 대화 · AI 대련";$("message").placeholder="AI와 다른 플레이어에게 메시지 보내기";$("chatPanel").classList.remove("hidden");}else $("chatPanel").classList.add("hidden")});
 socket.on("errorMsg",err);
@@ -43,7 +43,7 @@ socket.on("state",s=>{if(state&&state.day!==s.day){privateNotice="";announcement
 function render(){if(!state)return;const me=state.me;
  $("phase").textContent=({lobby:"대기실",night_mafia:"밤 · 마피아 차례",night_vigilante:"밤 · 자경단 차례",night_missionary:"밤 · 선교사 차례",night_police:"밤 · 경찰 차례",night_spy:"밤 · 스파이 차례",night_doctor:"밤 · 의사 차례",night_priest:"밤 · 제사장 차례",day_discuss:"낮 · 토론",day_vote:"낮 · 투표",ended:"게임 종료"})[state.phase]||state.phase;
  $("role").textContent=me?.role?(me.isPresident?"대통령 · 국회의원":me.role):"대기 중";$("team").textContent=me?.team==="evil"?"악인 진영":me?.team==="good"?"선량한 진영":me?.team==="solo"?"개인 진영":"";$("roleIllustration").innerHTML=roleSvg(me?.role);
- const abilityNotice=me?.lastAbility&&me.lastAbility.day===state.day&&me.lastAbility.phase===state.phase?"능력 사용 완료 · "+me.lastAbility.label+" → "+me.lastAbility.targetName:"";
+ const abilityNotice=me?.lastAbility&&me.lastAbility.day===state.day?"능력 사용 완료 · "+me.lastAbility.label+" → "+me.lastAbility.targetName:"";
  $("notice").textContent=privateNotice||announcementNotice||abilityNotice||(state.aiMode?"AI 대련 모드 · AI 플레이어 5명과 대결 중":state.winner?state.winner+" 승리!":state.phase==="lobby"?"6명 이상 모이면 방장이 시작할 수 있어요.":me?.alive?"당신의 선택으로 게임의 흐름을 바꾸세요.":"관전 중입니다.");
  $("timer").textContent=state.endsAt?"남은 시간 "+Math.max(0,Math.ceil((state.endsAt-(Date.now()+serverOffset))/1000))+"초":"";
  const list=$("players");list.innerHTML="";
