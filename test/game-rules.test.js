@@ -55,3 +55,14 @@ test("이벤트 payload가 비정상이어도 구조 분해로 서버가 예외�
 test("사용한 능력의 확인 문구가 다음 밤 차례로 넘어가도 표시된다", () => {
   assert.match(client, /me\.lastAbility\.day===state\.day\?"능력 사용 완료/);
 });
+
+test("직업 중복 배정으로 같은 밤 차례가 사라지지 않도록 선량 직업은 중복되지 않는다", () => {
+  assert.match(server, /if\(goodRoles\.length\)roles\.push\(goodRoles\.shift\(\)\)/);
+  assert.match(server, /else roles\.push\("시민"\)/);
+});
+
+test("이미 사용한 능력과 행동 불가능한 부활 대상은 밤 차례에서 제외한다", () => {
+  assert.match(server, /function canTakeNightTurn\(r,p,role\)/);
+  assert.match(server, /return !p\.used\.revive&&\[\.\.\.r\.players\.values\(\)\]\.some\(x=>!x\.alive&&x\.connected!==false\)/);
+  assert.match(server, /t\.connected===false\|\|p\.used\.revive/);
+});
