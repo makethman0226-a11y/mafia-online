@@ -49,7 +49,7 @@ function assign(r){
  }
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
- r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.botSuspicion={};r.endsAt=Date.now()+60000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
+ r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.botSuspicion={};r.botHistory=[];r.endsAt=Date.now()+60000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
  log(r,"게임 시작! 낮 1일차 토론이 시작되었습니다.");
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
@@ -72,12 +72,30 @@ function botPickSuspect(r,bot,candidates){
  return pool.sort((a,b)=>botScore(r,b)-botScore(r,a))[0];
 }
 function botLine(r,bot){
- const living=alive(r),suspects=living.filter(p=>p.id!==bot.id).sort((a,b)=>botScore(r,b)-botScore(r,a));
- const suspect=suspects[0],day=r.day;
- if(suspect&&botScore(r,suspect)>0)return day+"일차인데 "+suspect.name+"님의 발언과 투표 흐름이 조금 수상해요. 근거를 더 들어보고 싶습니다.";
- if(day===1)return "첫날은 정보가 적으니 다들 한 명씩 의견을 말해 주세요. 성급한 지목은 피하겠습니다.";
- if(living.length<=4)return "생존자가 얼마 안 남았어요. 지금까지 나온 투표와 발언을 다시 확인해 봅시다.";
- return "지금까지의 발언과 투표를 같이 살펴보죠. 의심하는 사람이 있다면 근거도 말해 주세요.";
+ const living=alive(r).filter(p=>p.id!==bot.id);
+ const recent=(r.botHistory||[]).slice(-8);
+ const named=living.filter(p=>recent.some(m=>m.text.includes(p.name)));
+ const ranked=living.map(p=>({p,score:botScore(r,p)})).sort((a,b)=>b.score-a.score);
+ const suspect=ranked[0]?.p;
+ const last=recent[recent.length-1];
+ const openers=["음, 잠깐만요.","저는 조금 다르게 봤어요.","아까 이야기 이어서 말하면,","개인적으로는 아직 확신은 없는데요.","잠깐 의견 하나 낼게요.","그건 좀 더 확인해 봐야 할 것 같아요."];
+ const questions=["그렇게 생각한 이유가 있어요?","아까 말한 내용이랑 조금 다른데 설명해 줄 수 있나요?","혹시 다른 근거도 있나요?","그 판단은 조금 빠른 것 같지 않아요?"];
+ if(last&&last.name!==bot.name&&Math.random()<.48){
+  const mentioned=living.find(p=>last.text.includes(p.name));
+  if(mentioned&&mentioned.id!==bot.id)return mentioned.name+"님 얘기가 나왔는데, 저는 일단 이유를 더 듣고 싶어요. "+questions[Math.floor(Math.random()*questions.length)];
+  return last.name+"님 말은 알겠는데, 아직 단정하긴 이른 것 같아요.";
+ }
+ if(suspect&&botScore(r,suspect)>=2&&Math.random()<.68){
+  const lines=["저는 "+suspect.name+"님 쪽이 조금 걸려요. 투표 흐름이 자연스럽지 않았어요.","지금은 "+suspect.name+"님을 조금 의심하고 있어요. 본인 생각도 들어보고 싶어요.",""+suspect.name+"님, 아까 그 선택은 어떤 이유였어요?","다들 "+suspect.name+"님을 어떻게 봐요? 저는 아직 판단을 못 하겠어요."];
+  return openers[Math.floor(Math.random()*openers.length)]+" "+lines[Math.floor(Math.random()*lines.length)];
+ }
+ if(r.day===1){
+  const first=["첫날이라 단서가 거의 없네요. 일단 말하는 거 들어보고 정할게요.","저는 너무 빨리 투표하는 건 반대예요. 한 바퀴 얘기해 봐요.","혹시 먼저 의심되는 사람 있는 분? 이유도 같이 말해 주세요.","아직은 중립적으로 볼게요. 서로 질문 좀 해보죠."];
+  return first[Math.floor(Math.random()*first.length)];
+ }
+ if(living.length<=4)return ["이제 인원이 적어서 한 표가 중요해요. 마지막 투표들 다시 확인합시다.","잠깐, 어제 누가 누구를 지목했는지 기억하는 분 있어요?","지금은 감으로 찍기보다 앞뒤가 맞는지 보는 게 좋겠어요."][Math.floor(Math.random()*3)];
+ if(named.length)return named[Math.floor(Math.random()*named.length)].name+"님, 아까 하신 말 조금만 더 설명해 주세요.";
+ return ["저는 아직 반반이에요. 다른 분들 의견 듣고 정할게요.","말이 적은 분들도 한 번씩 의견 내주시면 좋겠어요.","방금 나온 의견들 정리하고 투표하는 게 어떨까요?","한 명만 계속 몰기보다는 다른 가능성도 봐야 할 것 같아요."][Math.floor(Math.random()*4)];
 }
 function recordAbility(p,r,t,label){p.lastAbility={label,targetName:t.name,day:r.day,phase:r.phase};}
 const BOT_DISCUSSION_LINES=[
@@ -304,7 +322,7 @@ io.on("connection",s=>{
     if(message.includes(b.name))r.botSuspicion[b.id]=(r.botSuspicion[b.id]||0)+2;
    }
   }
-  io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
+  if(!r.botHistory)r.botHistory=[];r.botHistory.push({name:p.name,text:message,day:r.day});if(r.botHistory.length>40)r.botHistory.shift();io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
  }
  });
  s.on("disconnect",()=>{removeFromQueue(s.id);for(const r of rooms.values()){const p=r.players.get(s.id);if(p&&r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;sendState(r);}else if(p){p.connected=false;if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}});
