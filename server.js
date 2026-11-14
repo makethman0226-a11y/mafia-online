@@ -21,7 +21,7 @@ function roomCode(){ return crypto.randomBytes(3).toString("hex").toUpperCase();
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
 function revealedRole(p){ return p.role==="클러쳐" ? "시민" : p.role; }
 function publicState(r){
- return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
+ return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
  const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,vigilanteInspectUsed:p.used?.vigilanteInspectDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,vigilanteTargetId:p.used?.vigilanteTarget||null,lastAbility:p.lastAbility||null};
