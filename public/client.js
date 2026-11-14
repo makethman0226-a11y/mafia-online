@@ -30,7 +30,7 @@ $("quick").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네임
 socket.on("queueStatus",d=>{if(d.waiting){$("home").classList.remove("hidden");$("game").classList.add("hidden");err("자동 매칭 대기 중… 현재 대기 인원 "+d.count+"명 (최소 6명)");}else err("매칭 대기가 취소되었습니다.");});
 $("create").onclick=()=>{err("");socket.emit("create",$("name").value)};
 $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("code").value})};
-socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];$("chatPanel").classList.add("hidden")});
+socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];teamMode=false;if(d.aiMode){$("chatTitle").textContent="전체 대화 · AI 대련";$("message").placeholder="AI와 다른 플레이어에게 메시지 보내기";$("chatPanel").classList.remove("hidden");}else $("chatPanel").classList.add("hidden")});
 socket.on("errorMsg",err);
 socket.on("privateResult",d=>{privateNotice=d.text;render()});
 socket.on("reporterAnnouncement",d=>{announcementNotice=d.text;render()});
