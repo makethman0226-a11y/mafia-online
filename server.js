@@ -24,7 +24,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -71,7 +71,6 @@ function runBotNight(r){
   if(!others.length)continue;
   if(b.role==="마피아"&&!Object.values(r.actions).some(x=>x.type==="attack")){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["attack:"+b.id]={type:"attack",actor:b.id,target:t.id};}
   if(b.role==="의사"){const t=botChoose(r,others);if(t)r.actions["heal:"+b.id]={type:"heal",actor:b.id,target:t.id};}
-  if(b.role==="판사"){const t=botChoose(r,others);if(t)r.actions["judge:"+b.id]={type:"judge",actor:b.id,target:t.id};}
   if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}
   if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
   if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
@@ -84,8 +83,6 @@ function nightResolve(r){
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
  if(target&&target!==save){const victim=r.players.get(target);if(markDead(victim,"이 밤에 탈락했습니다."))log(r,victim.name+"님이 밤에 탈락했습니다.");}
- const judge=Object.values(act).find(x=>x.type==="judge");
- if(judge){const j=r.players.get(judge.actor), t=r.players.get(judge.target);if(j?.alive){if(t&&t.team==="evil"){if(markDead(t,"이 밤에 판사의 처벌로 탈락했습니다."))log(r,"판사의 처벌로 한 명이 탈락했습니다.");}else{if(markDead(j,"이 밤에 잘못된 판결로 탈락했습니다."))log(r,"판사가 잘못 판단해 탈락했습니다.");}}}
  const vigil=Object.values(act).find(x=>x.type==="vigilante");
  if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){if(markDead(t,"이 밤에 자경단의 행동으로 탈락했습니다."))log(r,"자경단의 행동으로 악인 한 명이 탈락했습니다.");}}
  for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t||(x.type!=="revive"&&!t.alive))continue;
@@ -103,9 +100,14 @@ function allAliveVoted(r){const voters=alive(r).filter(p=>p.connected!==false);r
 function resolveVote(r){
  if(r.phase!=="day_vote"||r.resolvingVote)return;r.resolvingVote=true;
  fillBotVotes(r);
- const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v);if(p?.alive)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
+ const judgeAction=Object.values(r.actions).find(x=>x.type==="judge");
+ if(judgeAction){const judge=r.players.get(judgeAction.actor),target=r.players.get(judgeAction.target);
+  if(judge?.alive&&target?.alive){if(target.team==="evil"){target.alive=false;log(r,"판사의 판결로 "+target.name+"님이 탈락했습니다.");}
+   else{judge.alive=false;log(r,"판사가 잘못된 판결을 내려 탈락했습니다.");}}
+ }
+ const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v),target=r.players.get(t);if(p?.alive&&target?.alive)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
- let resultText="";
+ let resultText=judgeAction?"판사의 능력이 사용되었습니다.\\n":"";
  let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
   const target=r.players.get(sorted[0][0]);
@@ -165,10 +167,16 @@ io.on("connection",s=>{
  s.on("create",name=>{name=clean(name);if(!name)return;const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{}};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);});
  s.on("join",({code,name})=>{const r=rooms.get(String(code||"").toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=15)return s.emit("errorMsg","방을 찾을 수 없거나 입장할 수 없습니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);});
  s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6)return s.emit("errorMsg","방장만 6명 이상일 때 시작할 수 있습니다.");assign(r);sendState(r);});
- s.on("action",({type,target})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t||r.phase!=="night")return;
+ s.on("action",({type,target})=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t)return;
+ if(type==="judge"){
+  if(p.role!=="판사"||r.phase!=="day_vote"||!t.alive||p.id===t.id||p.used.judgeDay===r.day||r.resolvingVote)return;
+  r.actions["judge:"+p.id]={type:"judge",actor:p.id,target:t.id};
+  p.used.judgeDay=r.day;recordAbility(p,r,t,"판결");sendState(r);return;
+ }
+ if(r.phase!=="night")return;
  if(type!=="revive"&&!t.alive)return;
  if(type==="revive"&&(t.alive||p.used.revive))return;
- const allowed={의사:"heal",마피아:"attack",판사:"judge",자경단:"vigilante",선교사:"convert",제사장:"revive"};
+ const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id)return;
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
