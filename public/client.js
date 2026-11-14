@@ -23,7 +23,8 @@ function render(){if(!state)return;const me=state.me;
  const list=$("players");list.innerHTML="";
  state.players.forEach(p=>{const d=document.createElement("div");d.className="player"+(!p.alive?" dead":"");d.textContent=p.name+(p.id===me?.id?" (나)":"")+(p.role?" · "+p.role:"");const priestReviveTarget=state.phase==="night"&&me?.role==="제사장";
  if(me?.alive&&p.id!==me.id&&(priestReviveTarget?!p.alive:p.alive)){let label=null,fn=null;
- if(state.phase==="night"){const map={의사:["치료","heal"],마피아:["공격","attack"],판사:["처벌","judge"],자경단:["공격","vigilante"],선교사:["전향","convert"],제사장:["부활","revive"]};if(map[me.role]){label=map[me.role][0];fn=()=>emitAction(map[me.role][1],p.id)}}
+ if(state.phase==="night"){const map={의사:["치료","heal"],마피아:["공격","attack"],자경단:["공격","vigilante"],선교사:["전향","convert"],제사장:["부활","revive"]};if(map[me.role]){label=map[me.role][0];fn=()=>emitAction(map[me.role][1],p.id)}}
+ if(state.phase==="day_vote"&&me.role==="판사"){label=me.judgeUsed?"판결 완료":"판결";fn=()=>emitAction("judge",p.id);}
  if(state.phase==="day_vote"){label="투표";fn=()=>socket.emit("vote",p.id)}
  if(state.phase==="night"&&(me.role==="경찰"||me.role==="스파이")){label=me.role==="경찰"?"조사":"직업 조사";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&me.role==="기자"){label="기사 발표";fn=()=>socket.emit("special",{target:p.id})}
