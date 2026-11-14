@@ -24,7 +24,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,vigilanteInspectUsed:p.used?.vigilanteInspectDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,vigilanteTargetId:p.used?.vigilanteTarget||null,lastAbility:p.lastAbility||null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -71,7 +71,7 @@ function runBotNight(r){
   if(!others.length)continue;
   if(b.role==="마피아"&&!Object.values(r.actions).some(x=>x.type==="attack")){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["attack:"+b.id]={type:"attack",actor:b.id,target:t.id};}
   if(b.role==="의사"){const t=botChoose(r,others);if(t)r.actions["heal:"+b.id]={type:"heal",actor:b.id,target:t.id};}
-  if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}
+  if(b.role==="자경단"){const t=botChoose(r,others.filter(x=>x.team==="evil"));if(t){b.used.vigilanteTarget=t.id;r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}}
   if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
   if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
  }
@@ -89,6 +89,7 @@ function nightResolve(r){
   if(x.type==="convert"){if(t.team==="good"&&!p.used.convert){t.team="evil";t.joined=true;p.used.convert=true;log(r,"진영에 변화가 생겼습니다.");}else if(t.team==="evil"){markDead(p,"이 밤에 전향 실패로 탈락했습니다.");log(r,"선교사가 잘못 전향을 시도해 탈락했습니다.");}}
   if(x.type==="revive"&&p.role==="제사장"&&!p.used.revive&&!t.alive){t.alive=true;const deathIndex=deaths.findIndex(d=>d.startsWith(t.name+"님"));if(deathIndex>=0)deaths.splice(deathIndex,1);p.used.revive=true;log(r,"제사장의 능력으로 한 명이 부활했습니다.");}
  }
+ for(const p of r.players.values())if(p.role==="자경단")p.used.vigilanteTarget=null;
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
  io.to(r.code).emit("nightResult",{text:nightText});
  const w=endCheck(r);if(w)return finish(r,w);
@@ -178,6 +179,7 @@ io.on("connection",s=>{
  if(type==="revive"&&(t.alive||p.used.revive))return;
  const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:"convert",제사장:"revive"};
  if(allowed[p.role]!==type||p.id===t.id)return;
+ if(type==="vigilante"&&p.used.vigilanteTarget!==t.id)return;
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
@@ -211,8 +213,8 @@ io.on("connection",s=>{
    return;
   }
   if(p.role==="자경단"&&r.phase==="day_discuss"&&p.used.vigilanteInspectDay!==r.day){
-   p.used.vigilanteInspectDay=r.day;recordAbility(p,r,t,"대상 조사");
-   s.emit("privateResult",{text:t.team==="evil"?"악인입니다. 밤에 행동할 수 있습니다.":"악인이 아닙니다."});
+   p.used.vigilanteInspectDay=r.day;p.used.vigilanteTarget=t.team==="evil"?t.id:null;recordAbility(p,r,t,"정체 조사");
+   s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 오늘 밤 이 사람을 공격할 수 있습니다.":"악인이 아닙니다.")});
    sendState(r);
   }
  });
