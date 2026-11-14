@@ -17,5 +17,6 @@ jobs:
       - run: npm install
       - run: node --check server.js
       - run: node --check public/client.js
+      - run: npm test
 
 # Refresh the main-branch deployment event for connected hosting.
