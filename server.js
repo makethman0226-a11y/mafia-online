@@ -49,8 +49,8 @@ function assign(r){
  }
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
- r.phase="night";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+30000;
- log(r,"게임 시작! 밤이 되었습니다.");
+ r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.endsAt=Date.now()+60000;
+ log(r,"게임 시작! 낮 1일차 토론이 시작되었습니다.");
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
 function endCheck(r){
