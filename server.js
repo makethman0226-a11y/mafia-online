@@ -43,9 +43,10 @@ function assign(r){
  }
  roles.push("궁정광대");
  const goodRoles=["의사","경찰","판사","국회의원","기자","자경단","제사장"];
+ for(let i=goodRoles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[goodRoles[i],goodRoles[j]]=[goodRoles[j],goodRoles[i]];}
  while(roles.length<n){
-  if(Math.random()<0.20)roles.push("시민");
-  else roles.push(goodRoles[Math.floor(Math.random()*goodRoles.length)]);
+  if(goodRoles.length)roles.push(goodRoles.shift());
+  else roles.push("시민");
  }
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
@@ -147,7 +148,7 @@ const NIGHT_TURNS=[
 const NIGHT_PHASE_BY_TYPE={attack:"night_mafia",vigilante:"night_vigilante",convert:"night_missionary",heal:"night_doctor",revive:"night_priest"};
 function beginNightTurn(r,index=0){
  if(index>=NIGHT_TURNS.length)return nightResolve(r);
- const turn=NIGHT_TURNS[index],members=alive(r).filter(p=>p.role===turn.role);
+ const turn=NIGHT_TURNS[index],members=alive(r).filter(p=>p.role===turn.role&&canTakeNightTurn(r,p,turn.role));
  
  r.nightTurnIndex=index;
  if(!members.length)return beginNightTurn(r,index+1);
@@ -178,6 +179,18 @@ function beginNightTurn(r,index=0){
   return beginNightTurn(r,index+1);
  }
  sendState(r);
+}
+function canTakeNightTurn(r,p,role){
+ if(role==="자경단"){
+  if(!p.used.vigilanteInvestigated)return true;
+  const target=p.vigilanteTargetId?r.players.get(p.vigilanteTargetId):null;
+  return !!(target?.alive&&r.day>p.vigilanteInvestigatedDay);
+ }
+ if(role==="선교사")return !p.used.convert;
+ if(role==="경찰")return p.used.policeNight!==r.day;
+ if(role==="스파이")return p.used.spyNight!==r.day;
+ if(role==="제사장")return !p.used.revive&&[...r.players.values()].some(x=>!x.alive);
+ return true;
 }
 function advanceNightTurn(r){
  if(!r||!String(r.phase).startsWith("night_"))return;
@@ -257,7 +270,7 @@ function runMatchmaking(){
 io.on("connection",s=>{
  s.on("quickJoin",name=>{
   name=clean(name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
-  removeFromQueue(s.id);matchmakingQueue.push({id:s.id,name,socket:s});
+  removeFromQueue(s.id);if(matchmakingQueue.some(x=>x.name.toLowerCase()===name.toLowerCase()))return s.emit("errorMsg","이미 대기 중인 닉네임입니다.");matchmakingQueue.push({id:s.id,name,socket:s});
   s.emit("queueStatus",{waiting:true,count:matchmakingQueue.length});
   runMatchmaking();
  });
