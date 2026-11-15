@@ -102,3 +102,16 @@ test("결과 화면은 참가자 전체 직업을 표시하고 확인 시 메인
   assert.match(html, /id="gameResult"/);
   assert.match(server, /s\.on\("leaveRoom"/);
 });
+
+
+test("악인팀은 살아 있는 전체 플레이어의 절반 이상이면 승리한다", () => {
+  assert.match(server, /evil>=Math\.ceil\(a\.length\/2\)/);
+  assert.doesNotMatch(server, /evil>=good/);
+});
+
+test("선교사에게 세뇌된 플레이어는 직업과 관계없이 악인팀으로 계산되고 결과 화면에도 악인 진영으로 표시된다", () => {
+  assert.match(server, /t\.team="evil";t\.joined=true;p\.joined=true;p\.used\.convert=true/);
+  assert.match(server, /evil=a\.filter\(p=>p\.team==="evil"\)\.length/);
+  assert.match(server, /team:r\.phase==="ended"\?x\.team:null/);
+  assert.match(client, /p\.team==="evil"\?"악인 진영"/);
+});
