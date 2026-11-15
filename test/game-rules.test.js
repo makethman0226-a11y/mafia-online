@@ -115,3 +115,9 @@ test("선교사에게 세뇌된 플레이어는 직업과 관계없이 악인팀
   assert.match(server, /team:r\.phase==="ended"\?x\.team:null/);
   assert.match(client, /p\.team==="evil"\?"악인 진영"/);
 });
+
+
+test("비밀투표는 투표자 정보를 노출하지 않고 대상별 합계만 표시한다",()=>{assert.match(server,/const voteCounts=\{\};if\(r\.phase==="day_vote"\)for\(const \[voterId,target\] of Object\.entries\(r\.votes\|\|\{\}\)\)/);assert.match(client,/state\.voteCounts\?\.\[p\.id\]/);assert.match(client,/voteMarkSvg\(\)/);});
+test("판사는 밤 차례에 판결봉 버튼으로 판결하고 검은 화면 공지를 표시한다",()=>{assert.match(server,/phase!=="night_judge"/);assert.match(server,/judgementAnnouncement/);assert.match(client,/state\.phase==="night_judge"&&me\.role==="판사"/);assert.match(client,/showBlackAnnouncement/);});
+test("방장이 토론·투표 시간을 정하고 공개·비공개 서버를 설정한다",()=>{assert.match(server,/discussionSeconds/);assert.match(server,/voteSeconds/);assert.match(server,/visibility==="public"/);assert.match(client,/setupDiscussionSeconds/);assert.match(client,/lobbyVoteSeconds/);assert.match(client,/setupVisibility/);assert.match(client,/publicRooms/);});
+test("악인 수 설정은 최대 3명으로 제한한다",()=>{assert.match(server,/const maxEvil=Math\.min\(3,maxPlayers-2\)/);assert.match(client,/Math\.min\(3,/);});
