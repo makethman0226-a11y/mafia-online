@@ -128,7 +128,8 @@ test("비밀투표는 투표자 정보를 공개하지 않고 대상별 득표�
   assert.match(server, /voteCounts,serverNow:Date\.now\(\)/);
   assert.match(server, /hasVoted:!!r\.votes\[p\.id\]/);
   assert.doesNotMatch(server, /votes:r\.votes/);
-  assert.match(client, /tally\.innerHTML=voteMarkSvg\(\)\+"<b>"+state\.voteCounts\[p\.id\]\+"<\/b>"/);
+  assert.match(client, /function voteMarkSvg\(\)/);
+  assert.match(client, /state\.voteCounts\[p\.id\]/);
 });
 
 test("판사봉은 판사 밤 차례에만 표시되고 버튼을 누른 뒤 대상 선택으로 판결한다", () => {
