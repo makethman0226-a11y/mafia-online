@@ -87,7 +87,7 @@ function render(){if(!state)return;const me=state.me;$("judgeGavel").classList.t
  if(state.phase==="day_vote")d.append(button(me.hasVoted?"투표 완료":"투표",()=>socket.emit("vote",p.id),!!me.hasVoted));
  if((state.phase==="night_police"&&me.role==="경찰")||(state.phase==="night_spy"&&me.role==="스파이")){label=me.role==="경찰"?"조사":"직업 조사";fn=()=>socket.emit("special",{target:p.id})}
  if(state.phase==="day_discuss"&&state.day>1&&me.role==="기자"){label="기사 발표";fn=()=>socket.emit("special",{target:p.id})}
- if(label){const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedVigilante=false;d.append(button(usedReporter?"오늘 발표 완료":usedVigilante?"오늘 조사 완료":label,fn,!!usedReporter||!!usedVigilante));}}list.append(d)});
+ if(label){const usedReporter=me?.role==="기자"&&state.phase==="day_discuss"&&me.reporterUsed;const usedVigilante=false;d.append(button(usedReporter?"취재 완료":usedVigilante?"오늘 조사 완료":label,fn,!!usedReporter||!!usedVigilante));}}list.append(d)});
  $("controls").innerHTML="";if(state.phase==="day_vote"&&me?.alive&&!me.hasVoted)$("controls").append(button("투표 건너뛰기",()=>socket.emit("skipVote")));if(state.phase==="lobby"&&state.host===me?.id)$("controls").append(button("게임 시작",()=>socket.emit("start"),state.players.length<6||state.players.length>(state.settings?.maxPlayers||15)));
  $("log").innerHTML="";(state.log||[]).forEach(x=>{const d=document.createElement("div");d.textContent=x.day+"일차 · "+x.text;$("log").append(d)});
  $("teamChatToggle").classList.toggle("hidden",!state.teamChatAllowed);
