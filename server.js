@@ -62,10 +62,10 @@ function assign(r){
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
 function endCheck(r){
- const a=alive(r), evil=a.filter(p=>p.team==="evil").length, good=a.filter(p=>p.team==="good").length;
+ const a=alive(r), evil=a.filter(p=>p.team==="evil").length;
  if(!a.length)return "무승부";
  if(evil===0)return "선량한 팀";
- if(evil>=good)return "악인 팀";
+ if(evil>=Math.ceil(a.length/2))return "악인 팀";
  return null;
 }
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
