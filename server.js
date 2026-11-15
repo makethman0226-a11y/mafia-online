@@ -24,10 +24,10 @@ function broadcastPublicRooms(){io.emit("publicRooms",publicRoomList());}
 function revealedRole(p){ return p.role==="클러쳐" ? "시민" : p.role; }
 function publicState(r){
  const voteCounts={};if(r.phase==="day_vote")for(const [voterId,target] of Object.entries(r.votes||{})){const voter=r.players.get(voterId);const weight=voter?.role==="국회의원"?2:1;voteCounts[target]=(voteCounts[target]||0)+weight;}
- return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,settings:r.settings||null,visibility:r.visibility||"public",voteCounts,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
+ return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,settings:r.settings||null,visibility:r.visibility||"public",voteCounts,skippedCount:Object.keys(r.skippedVotes||{}).length,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:!!p.used?.judgeNight,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id]||!!r.skippedVotes?.[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:!!p.used?.judgeNight,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:r.phase==="ended"?x.role:(!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)),team:r.phase==="ended"?x.team:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -233,16 +233,19 @@ function nightResolve(r){
  const w=endCheck(r);if(w)return finish(r,w);
  r.phase="day_discuss";r.endsAt=Date.now()+r.settings.discussionSeconds*1000;r.actions={};r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
-function nextVote(r){r.phase="day_vote";r.votes={};r.resolvingVote=false;r.endsAt=Date.now()+r.settings.voteSeconds*1000;log(r,"투표가 시작되었습니다. 제한 시간은 "+r.settings.voteSeconds+"초입니다.");sendState(r);}
+function nextVote(r){r.phase="day_vote";r.votes={};r.skippedVotes={};r.resolvingVote=false;r.endsAt=Date.now()+r.settings.voteSeconds*1000;log(r,"투표가 시작되었습니다. 제한 시간은 "+r.settings.voteSeconds+"초입니다.");sendState(r);}
 function fillBotVotes(r){if(!r.aiMode)return;for(const b of alive(r).filter(p=>p.isBot&&!r.votes[p.id])){const candidates=alive(r).filter(p=>p.id!==b.id);const target=botPickSuspect(r,b,candidates);if(target)r.votes[b.id]=target.id;}}
-function allAliveVoted(r){const voters=alive(r).filter(p=>p.connected!==false);return voters.length>0&&voters.every(p=>!!r.votes[p.id]);}
+function allAliveVoted(r){const voters=alive(r).filter(p=>p.connected!==false);return voters.length>0&&voters.every(p=>!!r.votes[p.id]||!!r.skippedVotes?.[p.id]);}
 function resolveVote(r){
  if(r.phase!=="day_vote"||r.resolvingVote)return;r.resolvingVote=true;
  fillBotVotes(r);
  
  const counts={};for(const [v,t] of Object.entries(r.votes)){const p=r.players.get(v),target=r.players.get(t);if(p?.alive&&target?.alive&&target.id!==r.presidentId)counts[t]=(counts[t]||0)+(p.role==="국회의원"?2:1);}
  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
- let resultText="";
+ const skippedCount=Object.keys(r.skippedVotes||{}).length;
+ const tallyLines=sorted.map(([id,count])=>{const target=r.players.get(id);return (target?.name||"알 수 없는 플레이어")+" : "+count+"표";});
+ tallyLines.push("건너뛰기 : "+skippedCount+"표");
+ let resultText="투표 결과\\n"+(tallyLines.length?tallyLines.join("\\n"):"득표 없음")+"\\n\\n";
  let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
   const target=r.players.get(sorted[0][0]);
@@ -261,7 +264,7 @@ function resolveVote(r){
  }
  const evilRemaining=alive(r).filter(p=>p.team==="evil").length;
  resultText+="\n악인팀이 "+evilRemaining+"명 남았습니다.";
- io.to(r.code).emit("voteResult",{text:resultText});
+ io.to(r.code).emit("voteResult",{text:resultText,counts:sorted.map(([id,count])=>({name:r.players.get(id)?.name||"알 수 없음",count})),skippedCount});
  if(jesterWon)return finish(r,"궁정광대");
  const w=endCheck(r);if(w)return finish(r,w);
  r.day++;r.actions={};r.votes={};r.resolvingVote=false;
@@ -362,7 +365,8 @@ io.on("connection",s=>{
   }
 
  });
- s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
+ s.on("vote",target=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||!t?.alive||p.id===t.id||r.votes[s.id]||r.skippedVotes?.[s.id])return;r.votes[s.id]=target;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
+ s.on("skipVote",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||r.day===1||r.phase!=="day_vote"||r.resolvingVote||!p?.alive||r.votes[s.id]||r.skippedVotes?.[s.id])return;r.skippedVotes=r.skippedVotes||{};r.skippedVotes[s.id]=true;fillBotVotes(r);sendState(r);if(allAliveVoted(r))resolveVote(r);});
  s.on("chat",payload=>{const {text:msg,team}=payload&&typeof payload==="object"?payload:{};const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id);if(!r||!p||typeof msg!=="string"||!msg)return;const message=cleanMessage(msg);if(!message)return;
  if(team){if(!joinedEvil(p))return;for(const q of r.players.values())if(joinedEvil(q))io.to(q.id).emit("chat",{name:p.name,text:message,team:true});}
  else{if(!p.alive||r.phase==="ended")return;
