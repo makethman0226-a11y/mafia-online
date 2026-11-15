@@ -9,6 +9,17 @@ app.use(express.static("public"));
 app.get("/health", (_, res) => res.json({ ok: true }));
 const rooms = new Map();
 const matchmakingQueue = [];
+const adminSockets = new Set();
+const bannedNames = new Set();
+const isAdminTrigger = name => !!process.env.ADMIN_TRIGGER && String(name||"").trim()===process.env.ADMIN_TRIGGER;
+function adminSnapshot(){
+ const users=[];
+ for(const r of rooms.values()) for(const p of r.players.values()) users.push({id:p.id,name:p.name,room:r.code,phase:r.phase,alive:p.alive,aiMode:!!r.aiMode});
+ for(const q of matchmakingQueue) users.push({id:q.id,name:q.name,room:"매칭 대기",phase:"대기",alive:true,aiMode:false});
+ return {users,rooms:[...rooms.values()].map(r=>({code:r.code,count:r.players.size,phase:r.phase,day:r.day,aiMode:!!r.aiMode,visibility:r.visibility||"private"})),banned:[...bannedNames]};
+}
+function sendAdminData(){for(const id of adminSockets)io.to(id).emit("adminData",adminSnapshot());}
+
 const ROLES = {
  시민:{team:"good"}, 의사:{team:"good"}, 경찰:{team:"good"}, 판사:{team:"good"},
  국회의원:{team:"good"}, 기자:{team:"good"}, 자경단:{team:"good"}, 제사장:{team:"good"},
@@ -335,8 +346,27 @@ function runMatchmaking(){
 }
 io.on("connection",s=>{
  s.emit("publicRooms",publicRoomList());
+ s.on("adminLogout",()=>{adminSockets.delete(s.id);});
+ s.on("adminRefresh",()=>{if(adminSockets.has(s.id))s.emit("adminData",adminSnapshot());});
+ s.on("adminAction",payload=>{
+  if(!adminSockets.has(s.id))return;
+  const action=payload&&typeof payload==="object"?payload:{};
+  if(action.type==="kick"){
+   const targetId=String(action.playerId||"");
+   if(targetId&&targetId!==s.id){const target=io.sockets.sockets.get(targetId);if(target){target.emit("errorMsg","관리자에 의해 강제 퇴장되었습니다.");target.disconnect(true);}}
+  }else if(action.type==="ban"){
+   const name=clean(action.name);if(name&& !isAdminTrigger(name)){bannedNames.add(name.toLowerCase());for(const [id,sock] of io.sockets.sockets){if(id===s.id)continue;let found=false;for(const r of rooms.values()){const p=r.players.get(id);if(p&&p.name.toLowerCase()===name.toLowerCase())found=true;}const queued=matchmakingQueue.some(q=>q.id===id&&q.name.toLowerCase()===name.toLowerCase());if(found||queued){sock.emit("errorMsg","관리자에 의해 차단되었습니다.");sock.disconnect(true);}}}
+  }else if(action.type==="unban"){
+   const name=clean(action.name);if(name)bannedNames.delete(name.toLowerCase());
+  }else if(action.type==="closeRoom"){
+   const code=String(action.code||"").trim().toUpperCase(),r=rooms.get(code);if(r){for(const p of r.players.values()){const target=io.sockets.sockets.get(p.id);if(target){target.emit("errorMsg","관리자가 방을 종료했습니다.");target.disconnect(true);}}rooms.delete(code);broadcastPublicRooms();}
+  }else if(action.type==="announce"){
+   const message=cleanMessage(action.text);if(message)io.emit("adminAnnouncement",{text:message});
+  }
+  sendAdminData();
+ });
  s.on("quickJoin",name=>{
-  name=clean(name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
+  name=clean(name);if(isAdminTrigger(name))return s.emit("errorMsg","관리자 모드는 AI 대련 버튼으로 입장해 주세요.");if(bannedNames.has(name.toLowerCase()))return s.emit("errorMsg","차단된 닉네임입니다.");if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
   removeFromQueue(s.id);if(matchmakingQueue.some(x=>x.name.toLowerCase()===name.toLowerCase()))return s.emit("errorMsg","이미 대기 중인 닉네임입니다.");matchmakingQueue.push({id:s.id,name,socket:s});
   s.emit("queueStatus",{waiting:true,count:matchmakingQueue.length});
   runMatchmaking();
@@ -346,7 +376,7 @@ io.on("connection",s=>{
 
  s.on("soloStart",payload=>{
   const data=payload&&typeof payload==="object"?payload:{name:payload};
-  const name=clean(data.name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
+  const name=clean(data.name);if(isAdminTrigger(name)){adminSockets.add(s.id);s.emit("adminAuthenticated");sendAdminData();return;}if(bannedNames.has(name.toLowerCase()))return s.emit("errorMsg","차단된 닉네임입니다.");if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
   const settings=normalizeSettings(data.settings,6);
   const code=roomCode(),r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},aiMode:true,settings};
   r.players.set(s.id,{id:s.id,name,alive:true,isBot:false});
@@ -354,8 +384,8 @@ io.on("connection",s=>{
   for(let i=1;i<settings.maxPlayers;i++){const id="bot_"+crypto.randomBytes(5).toString("hex");r.players.set(id,{id,name:botNames[(i-1)%botNames.length],alive:true,isBot:true,persona:BOT_PERSONAS[(i-1)%BOT_PERSONAS.length],botTalkCount:0,lastBotLine:""});}
   rooms.set(code,r);s.join(code);s.emit("joined",{code,aiMode:true});assign(r);log(r,"AI 대련 모드 시작! AI 플레이어 "+(settings.maxPlayers-1)+"명과 대결합니다.");sendState(r);
  });
- s.on("create",payload=>{const data=payload&&typeof payload==="object"?payload:{name:payload};const name=clean(data.name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},settings:normalizeSettings(data.settings,6),visibility:normalizeSettings(data.settings,6).visibility};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);broadcastPublicRooms();});
- s.on("join",payload=>{const {code,name}=payload&&typeof payload==="object"?payload:{};const r=rooms.get(String(code||"").trim().toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=(r.settings?.maxPlayers||15))return s.emit("errorMsg","방을 찾을 수 없거나 정원이 가득 찼습니다.");if([...r.players.values()].some(x=>x.name.toLowerCase()===n.toLowerCase()))return s.emit("errorMsg","이미 사용 중인 닉네임입니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);broadcastPublicRooms();});
+ s.on("create",payload=>{const data=payload&&typeof payload==="object"?payload:{name:payload};const name=clean(data.name);if(isAdminTrigger(name))return s.emit("errorMsg","관리자 모드는 AI 대련 버튼으로 입장해 주세요.");if(bannedNames.has(name.toLowerCase()))return s.emit("errorMsg","차단된 닉네임입니다.");if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},settings:normalizeSettings(data.settings,6),visibility:normalizeSettings(data.settings,6).visibility};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);broadcastPublicRooms();});
+ s.on("join",payload=>{const {code,name}=payload&&typeof payload==="object"?payload:{};const r=rooms.get(String(code||"").trim().toUpperCase()),n=clean(name);if(isAdminTrigger(n))return s.emit("errorMsg","관리자 모드는 AI 대련 버튼으로 입장해 주세요.");if(bannedNames.has(n.toLowerCase()))return s.emit("errorMsg","차단된 닉네임입니다.");if(!r||!n||r.phase!=="lobby"||r.players.size>=(r.settings?.maxPlayers||15))return s.emit("errorMsg","방을 찾을 수 없거나 정원이 가득 찼습니다.");if([...r.players.values()].some(x=>x.name.toLowerCase()===n.toLowerCase()))return s.emit("errorMsg","이미 사용 중인 닉네임입니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);broadcastPublicRooms();});
  s.on("updateRoomSettings",payload=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby")return s.emit("errorMsg","대기실 방장만 설정을 바꿀 수 있습니다.");const next=normalizeSettings(payload,r.players.size);if(next.maxPlayers<r.players.size)return s.emit("errorMsg","현재 참가 인원보다 정원을 적게 설정할 수 없습니다.");r.settings=next;r.visibility=next.visibility;log(r,"방장이 게임 설정을 변경했습니다.");sendState(r);broadcastPublicRooms();});
  s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6||r.players.size>(r.settings?.maxPlayers||15))return s.emit("errorMsg","방장만 6명 이상, 설정 정원 이내일 때 시작할 수 있습니다.");assign(r);sendState(r);broadcastPublicRooms();});
  s.on("action",payload=>{const {type,target}=payload&&typeof payload==="object"?payload:{};const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t||typeof type!=="string")return;
@@ -431,6 +461,6 @@ io.on("connection",s=>{
  }
  });
  s.on("leaveRoom",()=>{for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;s.leave(code);if(r.aiMode){rooms.delete(code);break;}r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();break;}});
- s.on("disconnect",()=>{removeFromQueue(s.id);for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;if(r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();}else if(p.alive){p.connected=false;p.alive=false;log(r,p.name+"님이 접속 종료로 게임에서 이탈했습니다.");const w=endCheck(r);if(w)finish(r,w);else{sendState(r);broadcastPublicRooms();if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}}});
+ s.on("disconnect",()=>{adminSockets.delete(s.id);removeFromQueue(s.id);for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;if(r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();}else if(p.alive){p.connected=false;p.alive=false;log(r,p.name+"님이 접속 종료로 게임에서 이탈했습니다.");const w=endCheck(r);if(w)finish(r,w);else{sendState(r);broadcastPublicRooms();if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}}});
 });
 const PORT=process.env.PORT||3000;server.listen(PORT,"0.0.0.0",()=>console.log("MAFIA ONLINE listening on "+PORT));
