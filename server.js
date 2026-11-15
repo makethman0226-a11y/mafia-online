@@ -19,10 +19,11 @@ const clean = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/
 const cleanMessage = s => String(s || "").replace(/[<>]/g,"").replace(/[\x00-\x1F\x7F]/g,"").trim().slice(0,160);
 function roomCode(){ let code; do{code=crypto.randomBytes(3).toString("hex").toUpperCase();}while(rooms.has(code)); return code; }
 function emitRoom(r){ io.to(r.code).emit("state", publicState(r)); }
-function broadcastPublicRooms(){io.emit("publicRooms",[...rooms.values()].filter(r=>r.visibility==="public"&&r.phase==="lobby").map(r=>({code:r.code,count:r.players.size,maxPlayers:r.settings.maxPlayers})));}
+function publicRoomList(){return [...rooms.values()].filter(r=>r.visibility==="public"&&r.phase==="lobby").map(r=>({code:r.code,count:r.players.size,maxPlayers:r.settings.maxPlayers}));}
+function broadcastPublicRooms(){io.emit("publicRooms",publicRoomList());}
 function revealedRole(p){ return p.role==="클러쳐" ? "시민" : p.role; }
 function publicState(r){
- const voteCounts={};if(r.phase==="day_vote")for(const target of Object.values(r.votes||{}))voteCounts[target]=(voteCounts[target]||0)+1;
+ const voteCounts={};if(r.phase==="day_vote")for(const [voterId,target] of Object.entries(r.votes||{})){const voter=r.players.get(voterId);const weight=voter?.role==="국회의원"?2:1;voteCounts[target]=(voteCounts[target]||0)+weight;}
  return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,settings:r.settings||null,visibility:r.visibility||"public",voteCounts,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
@@ -226,9 +227,9 @@ function nightResolve(r){
  }
 
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
- io.to(r.code).emit("nightResult",{text:nightText});
  const judgeAction=Object.values(act).find(x=>x.type==="judge");
- if(judgeAction){const judge=r.players.get(judgeAction.actor),target=r.players.get(judgeAction.target);if(judge?.alive&&target?.alive){if(target.team==="evil"){markDead(target,"이 밤에 판결로 탈락했습니다.");log(r,"판사의 판결로 "+target.name+"님이 탈락했습니다.");}else{markDead(judge,"이 밤에 잘못된 판결로 탈락했습니다.");log(r,"판사가 선량한 플레이어에게 판결을 내려 탈락했습니다.");}}}
+ if(judgeAction){const judge=r.players.get(judgeAction.actor),target=r.players.get(judgeAction.target);if(judge?.alive&&target?.alive){if(target.team==="evil"){markDead(target,"이 밤에 판결로 탈락했습니다.");log(r,"판사의 판결로 "+target.name+"님이 탈락했습니다.");}else{markDead(judge,"이 밤に 잘못된 판결로 탈락했습니다.");log(r,"판사가 선량한 플레이어에게 판결을 내려 탈락했습니다.");}}}
+ io.to(r.code).emit("nightResult",{text:(judgeAction?"판사가 판결을 내렸습니다.\\n":"")+(deaths.length?deaths.join("\\n"):"오늘 밤 탈락자는 없습니다.")});
  const w=endCheck(r);if(w)return finish(r,w);
  r.phase="day_discuss";r.endsAt=Date.now()+r.settings.discussionSeconds*1000;r.actions={};r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
@@ -280,6 +281,7 @@ function runMatchmaking(){
  }
 }
 io.on("connection",s=>{
+ s.emit("publicRooms",publicRoomList());
  s.on("quickJoin",name=>{
   name=clean(name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");
   removeFromQueue(s.id);if(matchmakingQueue.some(x=>x.name.toLowerCase()===name.toLowerCase()))return s.emit("errorMsg","이미 대기 중인 닉네임입니다.");matchmakingQueue.push({id:s.id,name,socket:s});
@@ -300,9 +302,9 @@ io.on("connection",s=>{
   rooms.set(code,r);s.join(code);s.emit("joined",{code,aiMode:true});assign(r);log(r,"AI 대련 모드 시작! AI 플레이어 "+(settings.maxPlayers-1)+"명과 대결합니다.");sendState(r);
  });
  s.on("create",payload=>{const data=payload&&typeof payload==="object"?payload:{name:payload};const name=clean(data.name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},settings:normalizeSettings(data.settings,6),visibility:normalizeSettings(data.settings,6).visibility};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);broadcastPublicRooms();});
- s.on("join",payload=>{const {code,name}=payload&&typeof payload==="object"?payload:{};const r=rooms.get(String(code||"").trim().toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=(r.settings?.maxPlayers||15))return s.emit("errorMsg","방을 찾을 수 없거나 정원이 가득 찼습니다.");if([...r.players.values()].some(x=>x.name.toLowerCase()===n.toLowerCase()))return s.emit("errorMsg","이미 사용 중인 닉네임입니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);});
+ s.on("join",payload=>{const {code,name}=payload&&typeof payload==="object"?payload:{};const r=rooms.get(String(code||"").trim().toUpperCase()),n=clean(name);if(!r||!n||r.phase!=="lobby"||r.players.size>=(r.settings?.maxPlayers||15))return s.emit("errorMsg","방을 찾을 수 없거나 정원이 가득 찼습니다.");if([...r.players.values()].some(x=>x.name.toLowerCase()===n.toLowerCase()))return s.emit("errorMsg","이미 사용 중인 닉네임입니다.");r.players.set(s.id,{id:s.id,name:n,alive:true});s.join(r.code);s.emit("joined",{code:r.code});sendState(r);broadcastPublicRooms();});
  s.on("updateRoomSettings",payload=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby")return s.emit("errorMsg","대기실 방장만 설정을 바꿀 수 있습니다.");const next=normalizeSettings(payload,r.players.size);if(next.maxPlayers<r.players.size)return s.emit("errorMsg","현재 참가 인원보다 정원을 적게 설정할 수 없습니다.");r.settings=next;r.visibility=next.visibility;log(r,"방장이 게임 설정을 변경했습니다.");sendState(r);broadcastPublicRooms();});
- s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6||r.players.size>(r.settings?.maxPlayers||15))return s.emit("errorMsg","방장만 6명 이상, 설정 정원 이내일 때 시작할 수 있습니다.");assign(r);sendState(r);});
+ s.on("start",()=>{const r=[...rooms.values()].find(x=>x.players.has(s.id));if(!r||r.host!==s.id||r.phase!=="lobby"||r.players.size<6||r.players.size>(r.settings?.maxPlayers||15))return s.emit("errorMsg","방장만 6명 이상, 설정 정원 이내일 때 시작할 수 있습니다.");assign(r);sendState(r);broadcastPublicRooms();});
  s.on("action",payload=>{const {type,target}=payload&&typeof payload==="object"?payload:{};const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);if(!r||!p?.alive||!t||typeof type!=="string")return;
  if(type==="judge"){
   if(p.role!=="판사"||r.phase!=="night_judge"||!t.alive||p.id===t.id||p.used.judgeNight)return;
@@ -373,6 +375,6 @@ io.on("connection",s=>{
  }
  });
  s.on("leaveRoom",()=>{for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;s.leave(code);if(r.aiMode){rooms.delete(code);break;}r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();break;}});
- s.on("disconnect",()=>{removeFromQueue(s.id);for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;if(r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);}else if(p.alive){p.connected=false;p.alive=false;log(r,p.name+"님이 접속 종료로 게임에서 이탈했습니다.");const w=endCheck(r);if(w)finish(r,w);else{sendState(r);broadcastPublicRooms();if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}}});
+ s.on("disconnect",()=>{removeFromQueue(s.id);for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;if(r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();}else if(p.alive){p.connected=false;p.alive=false;log(r,p.name+"님이 접속 종료로 게임에서 이탈했습니다.");const w=endCheck(r);if(w)finish(r,w);else{sendState(r);broadcastPublicRooms();if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}}});
 });
 const PORT=process.env.PORT||3000;server.listen(PORT,"0.0.0.0",()=>console.log("MAFIA ONLINE listening on "+PORT));
