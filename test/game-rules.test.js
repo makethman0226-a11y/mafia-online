@@ -165,3 +165,20 @@ test("투표 결과는 대상별 득표수와 기권 수를 공개하고 최다 
   assert.match(server, /emit\("voteResult",\{text:resultText,counts:/);
   assert.match(html, /대상별 득표수와 건너뛰기 수를 공개/);
 });
+
+
+test("AI 토론은 서로 다른 성격과 대화 기억을 사용해 자연스럽게 반응한다", () => {
+  assert.match(server, /const BOT_PERSONAS=\[/);
+  assert.match(server, /p\.persona=BOT_PERSONAS\[i%BOT_PERSONAS\.length\]/);
+  assert.match(server, /const lastHuman=\[\.\.\.recent\]\.reverse\(\)\.find\(m=>!m\.isBot\)/);
+  assert.match(server, /lastHuman\.text\.includes\(bot\.name\)/);
+  assert.match(server, /r\.botHistory\.push\(\{name:bot\.name,text:message,day:r\.day,isBot:true\}\)/);
+  assert.match(server, /bot\.botTalkCount=\(bot\.botTalkCount\|\|0\)\+1/);
+});
+
+test("AI 토론 발언은 반복을 줄이고 일정한 간격으로 여러 차례 참여한다", () => {
+  assert.match(server, /r\.botChatCount>=8/);
+  assert.match(server, /r\.nextBotChatAt=Date\.now\(\)\+3500\+Math\.floor\(Math\.random\(\)\*5200\)/);
+  assert.match(server, /bot\.lastBotLine=line/);
+  assert.match(server, /b\.id!==r\.lastBotSpeakerId/);
+});
