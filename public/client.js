@@ -62,6 +62,23 @@ $("create").onclick=()=>{err("");if(!$("name").value.trim())return err("닉네�
 $("join").onclick=()=>{err("");socket.emit("join",{name:$("name").value,code:$("code").value})};
 socket.on("joined",d=>{$("home").classList.add("hidden");$("game").classList.remove("hidden");$("room").textContent="ROOM "+d.code;chatMessages.public=[];chatMessages.team=[];privateNotice="";announcementNotice="";$("privateMessage").classList.add("hidden");$("privateMessage").textContent="";teamMode=false;if(d.aiMode){$("chatTitle").textContent="전체 대화 · AI 대련";$("message").placeholder="AI와 다른 플레이어에게 메시지 보내기";$("chatPanel").classList.remove("hidden");}else $("chatPanel").classList.add("hidden")});
 socket.on("errorMsg",err);
+socket.on("adminAuthenticated",()=>{$("home").classList.add("hidden");$("game").classList.add("hidden");$("adminPanel").classList.remove("hidden");state=null;socket.emit("adminRefresh");});
+socket.on("adminData",renderAdminData);
+socket.on("adminAnnouncement",d=>showBlackAnnouncement("관리자 공지\\n"+d.text));
+function renderAdminData(data){
+ const users=$("adminUsers"),rooms=$("adminRooms"),banned=$("adminBanned");users.innerHTML="";rooms.innerHTML="";banned.innerHTML="";
+ (data.users||[]).forEach(u=>{const row=document.createElement("div");row.className="admin-row";const label=document.createElement("span");label.textContent=u.name+" · "+u.room+" · "+u.phase;const kick=document.createElement("button");kick.textContent="퇴장";kick.disabled=u.id===socket.id;kick.onclick=()=>socket.emit("adminAction",{type:"kick",playerId:u.id});row.append(label,kick);users.append(row);});
+ (data.rooms||[]).forEach(r=>{const row=document.createElement("div");row.className="admin-row";const label=document.createElement("span");label.textContent=r.code+" · "+r.count+"명 · "+r.phase+(r.aiMode?" · AI":"");const close=document.createElement("button");close.textContent="종료";close.onclick=()=>socket.emit("adminAction",{type:"closeRoom",code:r.code});row.append(label,close);rooms.append(row);});
+ (data.banned||[]).forEach(n=>{const tag=document.createElement("span");tag.className="admin-ban-tag";tag.textContent=n;banned.append(tag);});
+ if(!(data.users||[]).length)users.textContent="접속자가 없습니다.";
+ if(!(data.rooms||[]).length)rooms.textContent="진행 중인 방이 없습니다.";
+ if(!(data.banned||[]).length)banned.textContent="차단된 닉네임이 없습니다.";
+}
+$("adminBan").onclick=()=>{const name=$("adminBanName").value.trim();if(!name)return err("차단할 닉네임을 입력해 주세요.");socket.emit("adminAction",{type:"ban",name});$("adminBanName").value="";};
+$("adminUnban").onclick=()=>{const name=$("adminBanName").value.trim();if(!name)return err("해제할 닉네임을 입력해 주세요.");socket.emit("adminAction",{type:"unban",name});$("adminBanName").value="";};
+$("adminAnnounce").onclick=()=>{const text=$("adminNotice").value.trim();if(!text)return err("공지 내용을 입력해 주세요.");socket.emit("adminAction",{type:"announce",text});$("adminNotice").value="";};
+$("adminRefresh").onclick=()=>socket.emit("adminRefresh");
+$("adminExit").onclick=()=>{socket.emit("adminLogout");$("adminPanel").classList.add("hidden");$("home").classList.remove("hidden");$("name").value="";};
 socket.on("privateResult",d=>{privateNotice=d.text;render()});
 socket.on("reporterAnnouncement",d=>{announcementNotice=d.text;render()});
 socket.on("judgementAnnouncement",d=>{showBlackAnnouncement(d.text||"판사가 판결을 내렸습니다");});
