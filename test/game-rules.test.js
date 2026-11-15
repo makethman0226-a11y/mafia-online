@@ -121,3 +121,29 @@ test("비밀투표는 투표자 정보를 노출하지 않고 대상별 합계�
 test("판사는 밤 차례에 판결봉 버튼으로 판결하고 검은 화면 공지를 표시한다",()=>{assert.match(server,/phase!=="night_judge"/);assert.match(server,/judgementAnnouncement/);assert.match(client,/state\.phase==="night_judge"&&me\.role==="판사"/);assert.match(client,/showBlackAnnouncement/);});
 test("방장이 토론·투표 시간을 정하고 공개·비공개 서버를 설정한다",()=>{assert.match(server,/discussionSeconds/);assert.match(server,/voteSeconds/);assert.match(server,/visibility==="public"/);assert.match(client,/setupDiscussionSeconds/);assert.match(client,/lobbyVoteSeconds/);assert.match(client,/setupVisibility/);assert.match(client,/publicRooms/);});
 test("악인 수 설정은 최대 3명으로 제한한다",()=>{assert.match(server,/const maxEvil=Math\.min\(3,maxPlayers-2\)/);assert.match(client,/Math\.min\(3,/);});
+
+
+test("비밀투표는 투표자 정보를 공개하지 않고 대상별 득표수만 전달한다", () => {
+  assert.match(server, /const voteCounts=\{\};if\(r\.phase==="day_vote"\)/);
+  assert.match(server, /voteCounts,serverNow:Date\.now\(\)/);
+  assert.match(server, /hasVoted:!!r\.votes\[p\.id\]/);
+  assert.doesNotMatch(server, /votes:r\.votes/);
+  assert.match(client, /tally\.innerHTML=voteMarkSvg\(\)\+"<b>"+state\.voteCounts\[p\.id\]\+"<\/b>"/);
+});
+
+test("판사봉은 판사 밤 차례에만 표시되고 버튼을 누른 뒤 대상 선택으로 판결한다", () => {
+  assert.match(html, /id="judgeGavel"/);
+  assert.match(client, /\$\("judgeGavel"\)\.onclick=\(\)=>\{judgeMode=!judgeMode;render\(\)\}/);
+  assert.match(client, /state\.phase==="night_judge"&&me\?\.role==="판사"&&judgeMode/);
+  assert.match(server, /io\.to\(r\.code\)\.emit\("judgementAnnouncement",\{text:"판사가 판결을 내렸습니다"\}\)/);
+});
+
+test("방 설정은 공개·비공개 및 토론·투표 시간을 방장이 저장할 수 있고 악인 수는 1~3명이다", () => {
+  assert.match(server, /const maxEvil=Math\.min\(3,maxPlayers-2\)/);
+  assert.match(server, /const evilCount=Math\.max\(1,Math\.min\(maxEvil/);
+  assert.match(client, /discussionSeconds:Number\(\$\("setupDiscussionSeconds"\)\.value\)/);
+  assert.match(client, /voteSeconds:Number\(\$\("setupVoteSeconds"\)\.value\)/);
+  assert.match(client, /\[\["public","공개 서버"\],\["private","비공개 서버"\]\]/);
+  assert.match(server, /r\.visibility=next\.visibility/);
+  assert.match(server, /filter\(r=>r\.visibility==="public"&&r\.phase==="lobby"\)/);
+});
