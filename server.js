@@ -63,7 +63,7 @@ function assign(r){
  while(roles.length<n){if(goodRoles.length)roles.push(goodRoles.shift());else roles.push("시민");}
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  [...r.players.values()].forEach((p,i)=>{p.role=roles[i];p.team=ROLES[p.role].team;p.alive=true;p.joined=p.role==="마피아";p.used={};p.viewerId=p.id;});
- r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.botSuspicion={};r.botHistory=[];r.endsAt=Date.now()+r.settings.discussionSeconds*1000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;
+ r.phase="day_discuss";r.day=1;r.actions={};r.votes={};r.botSuspicion={};r.botHistory=[];r.botHistorySeq=0;r.lastBotSpeakerId=null;r.endsAt=Date.now()+r.settings.discussionSeconds*1000;r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;[...r.players.values()].filter(p=>p.isBot).forEach((p,i)=>{p.persona=BOT_PERSONAS[i%BOT_PERSONAS.length];p.botTalkCount=0;p.lastBotLine="";});
  log(r,"게임 시작! 낮 1일차 토론이 시작되었습니다.");
 }
 function joinedEvil(p){return p.team==="evil"&&p.joined&&p.alive;}
@@ -76,40 +76,79 @@ function endCheck(r){
 }
 function finish(r,w){r.phase="ended";r.winner=w;r.endsAt=null;log(r,w+" 승리!");sendState(r);}
 function botChoose(r,arr=[]){return Array.isArray(arr)&&arr.length?arr[Math.floor(Math.random()*arr.length)]:null;}
+const BOT_PERSONAS=[
+ {kind:"분석형",open:"잠깐, 지금까지 나온 얘기를 정리해 보면요.",tone:"근거를 조금 더 확인하고 싶어요."},
+ {kind:"직설형",open:"제 생각은 조금 달라요.",tone:"빙빙 돌리지 말고 이유를 말해 봐요."},
+ {kind:"신중형",open:"아직 확신할 단계는 아닌 것 같아요.",tone:"조금 더 듣고 결정해도 늦지 않아요."},
+ {kind:"관찰형",open:"저는 방금 반응이 조금 신경 쓰였어요.",tone:"말보다 앞뒤가 맞는지 보는 게 좋겠어요."},
+ {kind:"사교형",open:"다들 잠깐만요, 제 의견도 말해 볼게요.",tone:"서로 얘기 들어보고 차분히 정해요."},
+ {kind:"토론형",open:"그 주장에는 확인할 부분이 있어요.",tone:"누가 어떤 근거로 말했는지 따져보죠."}
+];
 function botScore(r,p){
  const votes=Object.values(r.votes||{}).filter(id=>id===p.id).length;
- return (r.botSuspicion?.[p.id]||0)+votes*1.4+(p.alive?0:-100);
+ const mentions=(r.botHistory||[]).filter(m=>!m.isBot&&m.text.includes(p.name)&&/(수상|의심|마피아|악인|거짓말|투표|몰아|이상하|믿기|걸려)/.test(m.text)).length;
+ return (r.botSuspicion?.[p.id]||0)+votes*1.35+mentions*.65+(p.alive?0:-100);
 }
 function botPickSuspect(r,bot,candidates){
  const pool=candidates.filter(p=>p.id!==bot.id&&(bot.team!=="evil"||p.team!=="evil"));
  if(!pool.length)return null;
- return pool.sort((a,b)=>botScore(r,b)-botScore(r,a))[0];
+ const ranked=pool.map(p=>({p,score:botScore(r,p)})).sort((a,b)=>b.score-a.score);
+ const top=ranked[0].score;
+ const tied=ranked.filter(x=>x.score>=top-.8).map(x=>x.p);
+ return botChoose(r,tied);
 }
 function botLine(r,bot){
  const living=alive(r).filter(p=>p.id!==bot.id);
- const recent=(r.botHistory||[]).slice(-8);
- const named=living.filter(p=>recent.some(m=>m.text.includes(p.name)));
- const ranked=living.map(p=>({p,score:botScore(r,p)})).sort((a,b)=>b.score-a.score);
+ const recent=(r.botHistory||[]).slice(-12);
+ const persona=bot.persona||BOT_PERSONAS[0];
+ const lastHuman=[...recent].reverse().find(m=>!m.isBot);
+ const direct=lastHuman&&lastHuman.text.includes(bot.name)&&/(수상|의심|마피아|악인|거짓말|이상하|몰아|투표)/.test(lastHuman.text);
+ const mentioned=lastHuman&&living.find(p=>p.id!==bot.id&&lastHuman.text.includes(p.name));
+ const ranked=living.filter(p=>bot.team!=="evil"||p.team!=="evil").map(p=>({p,score:botScore(r,p)})).sort((a,b)=>b.score-a.score);
  const suspect=ranked[0]?.p;
- const last=recent[recent.length-1];
- const openers=["음, 잠깐만요.","저는 조금 다르게 봤어요.","아까 이야기 이어서 말하면,","개인적으로는 아직 확신은 없는데요.","잠깐 의견 하나 낼게요.","그건 좀 더 확인해 봐야 할 것 같아요."];
- const questions=["그렇게 생각한 이유가 있어요?","아까 말한 내용이랑 조금 다른데 설명해 줄 수 있나요?","혹시 다른 근거도 있나요?","그 판단은 조금 빠른 것 같지 않아요?"];
- if(last&&last.name!==bot.name&&Math.random()<.48){
-  const mentioned=living.find(p=>last.text.includes(p.name));
-  if(mentioned&&mentioned.id!==bot.id)return mentioned.name+"님 얘기가 나왔는데, 저는 일단 이유를 더 듣고 싶어요. "+questions[Math.floor(Math.random()*questions.length)];
-  return last.name+"님 말은 알겠는데, 아직 단정하긴 이른 것 같아요.";
+ const votes=Object.entries(r.votes||{}).map(([voter,target])=>({voter:r.players.get(voter),target:r.players.get(target)})).filter(x=>x.voter?.alive&&x.target?.alive);
+ const recentVoteTarget=votes.length?votes[votes.length-1].target:null;
+ const candidates=[];
+ if(direct){
+  candidates.push("제 이름이 나와서 답할게요. 그렇게 의심하는 이유가 뭔지 구체적으로 말해 주실래요?");
+  candidates.push("저를 의심하는 건 알겠는데, 아직은 근거가 부족해 보여요. 다른 정황도 있나요?");
+  candidates.push("일단 제 입장도 들어 주세요. 지금은 이름만 지목하기보다 발언과 투표 흐름을 같이 봐야 해요.");
  }
- if(suspect&&botScore(r,suspect)>=2&&Math.random()<.68){
-  const lines=["저는 "+suspect.name+"님 쪽이 조금 걸려요. 투표 흐름이 자연스럽지 않았어요.","지금은 "+suspect.name+"님을 조금 의심하고 있어요. 본인 생각도 들어보고 싶어요.",""+suspect.name+"님, 아까 그 선택은 어떤 이유였어요?","다들 "+suspect.name+"님을 어떻게 봐요? 저는 아직 판단을 못 하겠어요."];
-  return openers[Math.floor(Math.random()*openers.length)]+" "+lines[Math.floor(Math.random()*lines.length)];
+ if(mentioned&&!direct){
+  candidates.push(mentioned.name+"님을 의심하는 이유가 방금 말한 부분 때문인가요? 어떤 점이 가장 걸렸어요?");
+  candidates.push(mentioned.name+"님 얘기가 나왔네요. 저는 그분이 앞에서 한 말과 지금 말이 일치하는지 확인하고 싶어요.");
+  candidates.push(mentioned.name+"님을 바로 몰기보다는 한 번 더 설명을 들어보죠.");
+ }
+ if(lastHuman&&!direct&&!mentioned){
+  candidates.push(lastHuman.name+"님 말은 들었어요. 그런데 그 판단을 뒷받침하는 단서가 하나 더 있을까요?");
+  candidates.push("방금 의견에 한 가지 덧붙이면, 지금까지 나온 투표 흐름도 같이 봐야 할 것 같아요.");
+ }
+ if(suspect&&botScore(r,suspect)>=1.5){
+  candidates.push("저는 "+suspect.name+"님이 조금 걸려요. 아직 확신은 아니지만 지금까지 나온 말과 투표가 자연스럽게 이어지는지 궁금해요.");
+  candidates.push(suspect.name+"님, 지금 의심받는 상황인데 본인 입장에서는 누가 가장 수상해 보여요?");
+  candidates.push("현재로서는 "+suspect.name+"님 쪽을 조금 더 살펴보고 싶어요. 다른 분들은 어떻게 생각하세요?");
+ }
+ if(recentVoteTarget&&recentVoteTarget.id!==bot.id){
+  candidates.push("방금 투표 흐름을 보니 "+recentVoteTarget.name+"님에게 표가 모이네요. 다들 같은 이유로 선택한 건지 확인해 봐야겠어요.");
  }
  if(r.day===1){
-  const first=["첫날이라 단서가 거의 없네요. 일단 말하는 거 들어보고 정할게요.","저는 너무 빨리 투표하는 건 반대예요. 한 바퀴 얘기해 봐요.","혹시 먼저 의심되는 사람 있는 분? 이유도 같이 말해 주세요.","아직은 중립적으로 볼게요. 서로 질문 좀 해보죠."];
-  return first[Math.floor(Math.random()*first.length)];
+  candidates.push("첫날이라 정보가 많지 않네요. 일단 서로 한 번씩 의견을 듣고 판단하는 게 좋겠어요.");
+  candidates.push("저는 아직 특정한 사람을 지목하긴 어려워요. 다들 누구를 의심하는지 이유까지 말해 주세요.");
+  candidates.push("너무 빨리 결론 내리지 말고, 발언이 앞뒤가 맞는지 차근차근 봐요.");
+ }else if(living.length<=4){
+  candidates.push("이제 인원이 얼마 안 남았어요. 이전에 누가 누구를 의심했고 실제 투표는 어떻게 했는지 다시 생각해 봅시다.");
+  candidates.push("이번 선택이 중요하니까 감보다는 지금까지 확인된 행동을 기준으로 정했으면 해요.");
+ }else{
+  candidates.push("아직 확실한 단서는 부족해요. 의심되는 분은 이름만 말하지 말고 이유도 같이 얘기해 주세요.");
+  candidates.push("말을 많이 했는지만 보지 말고, 질문을 받았을 때 어떻게 답하는지도 살펴봐요.");
+  candidates.push("한 사람에게 표가 몰리면 편하긴 하지만, 다 같이 같은 근거를 갖고 있는지는 확인해야 해요.");
  }
- if(living.length<=4)return ["이제 인원이 적어서 한 표가 중요해요. 마지막 투표들 다시 확인합시다.","잠깐, 어제 누가 누구를 지목했는지 기억하는 분 있어요?","지금은 감으로 찍기보다 앞뒤가 맞는지 보는 게 좋겠어요."][Math.floor(Math.random()*3)];
- if(named.length)return named[Math.floor(Math.random()*named.length)].name+"님, 아까 하신 말 조금만 더 설명해 주세요.";
- return ["저는 아직 반반이에요. 다른 분들 의견 듣고 정할게요.","말이 적은 분들도 한 번씩 의견 내주시면 좋겠어요.","방금 나온 의견들 정리하고 투표하는 게 어떨까요?","한 명만 계속 몰기보다는 다른 가능성도 봐야 할 것 같아요."][Math.floor(Math.random()*4)];
+ let unique=[...new Set(candidates)].filter(line=>line!==bot.lastBotLine);
+ if(!unique.length)unique=[persona.tone];
+ let line=unique[Math.floor(Math.random()*unique.length)];
+ if(bot.lastBotLine===line)line=persona.open+" "+persona.tone;
+ bot.lastBotLine=line;
+ return line;
 }
 function recordAbility(p,r,t,label){p.lastAbility={label,targetName:t.name,day:r.day,phase:r.phase};}
 const BOT_DISCUSSION_LINES=[
@@ -125,15 +164,24 @@ const BOT_DISCUSSION_LINES=[
 function scheduleBotDiscussion(r){
  if(!r.aiMode||r.phase!=="day_discuss")return;
  if(!r.botChatCount)r.botChatCount=0;
- if(!r.nextBotChatAt)r.nextBotChatAt=Date.now()+2500+Math.floor(Math.random()*2500);
- if(Date.now()<r.nextBotChatAt||r.botChatCount>=5)return;
+ if(!r.nextBotChatAt)r.nextBotChatAt=Date.now()+2200+Math.floor(Math.random()*2600);
+ if(Date.now()<r.nextBotChatAt||r.botChatCount>=8)return;
  const bots=alive(r).filter(p=>p.isBot);
  if(!bots.length)return;
- const bot=botChoose(r,bots);
+ const available=bots.filter(b=>b.id!==r.lastBotSpeakerId);
+ const leastSpoken=Math.min(...(available.length?available:bots).map(b=>b.botTalkCount||0));
+ const pool=(available.length?available:bots).filter(b=>(b.botTalkCount||0)<=leastSpoken+1);
+ const bot=botChoose(r,pool);
+ if(!bot)return;
  const message=botLine(r,bot);
  io.to(r.code).emit("chat",{name:bot.name,text:message,team:false});
+ if(!r.botHistory)r.botHistory=[];
+ r.botHistory.push({name:bot.name,text:message,day:r.day,isBot:true});
+ if(r.botHistory.length>40)r.botHistory.shift();
+ bot.botTalkCount=(bot.botTalkCount||0)+1;
+ r.lastBotSpeakerId=bot.id;
  r.botChatCount++;
- r.nextBotChatAt=Date.now()+4500+Math.floor(Math.random()*5000);
+ r.nextBotChatAt=Date.now()+3500+Math.floor(Math.random()*5200);
 }
 function runBotNight(r){
  if(!r.aiMode)return;
@@ -301,7 +349,7 @@ io.on("connection",s=>{
   const code=roomCode(),r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},aiMode:true,settings};
   r.players.set(s.id,{id:s.id,name,alive:true,isBot:false});
   const botNames=["하늘","단풍","별이","구름","달빛","노을","바다","새벽","은하","초롱","가람","이슬","나래","도윤"];
-  for(let i=1;i<settings.maxPlayers;i++){const id="bot_"+crypto.randomBytes(5).toString("hex");r.players.set(id,{id,name:botNames[(i-1)%botNames.length],alive:true,isBot:true});}
+  for(let i=1;i<settings.maxPlayers;i++){const id="bot_"+crypto.randomBytes(5).toString("hex");r.players.set(id,{id,name:botNames[(i-1)%botNames.length],alive:true,isBot:true,persona:BOT_PERSONAS[(i-1)%BOT_PERSONAS.length],botTalkCount:0,lastBotLine:""});}
   rooms.set(code,r);s.join(code);s.emit("joined",{code,aiMode:true});assign(r);log(r,"AI 대련 모드 시작! AI 플레이어 "+(settings.maxPlayers-1)+"명과 대결합니다.");sendState(r);
  });
  s.on("create",payload=>{const data=payload&&typeof payload==="object"?payload:{name:payload};const name=clean(data.name);if(!name)return s.emit("errorMsg","닉네임을 입력해 주세요.");const code=roomCode();const r={code,players:new Map(),host:s.id,phase:"lobby",day:0,log:[],endsAt:null,actions:{},votes:{},settings:normalizeSettings(data.settings,6),visibility:normalizeSettings(data.settings,6).visibility};r.players.set(s.id,{id:s.id,name,alive:true});rooms.set(code,r);s.join(code);s.emit("joined",{code});sendState(r);broadcastPublicRooms();});
@@ -375,7 +423,7 @@ io.on("connection",s=>{
     if(message.includes(b.name))r.botSuspicion[b.id]=(r.botSuspicion[b.id]||0)+2;
    }
   }
-  if(!r.botHistory)r.botHistory=[];r.botHistory.push({name:p.name,text:message,day:r.day});if(r.botHistory.length>40)r.botHistory.shift();io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
+  if(!r.botHistory)r.botHistory=[];r.botHistory.push({name:p.name,text:message,day:r.day,isBot:false});if(r.botHistory.length>40)r.botHistory.shift();if(r.aiMode&&r.phase==="day_discuss")r.nextBotChatAt=Math.min(r.nextBotChatAt||Date.now()+1000,Date.now()+1200+Math.floor(Math.random()*1000));io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
  }
  });
  s.on("leaveRoom",()=>{for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;s.leave(code);if(r.aiMode){rooms.delete(code);break;}r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);broadcastPublicRooms();break;}});
