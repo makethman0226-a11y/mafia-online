@@ -25,7 +25,7 @@ function publicState(r){
 }
 function viewFor(r,p){
  const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:p.used?.judgeDay===r.day,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
- st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)}));
+ st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:r.phase==="ended"?x.role:(!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)),team:r.phase==="ended"?x.team:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
 }
@@ -364,6 +364,7 @@ io.on("connection",s=>{
   if(!r.botHistory)r.botHistory=[];r.botHistory.push({name:p.name,text:message,day:r.day});if(r.botHistory.length>40)r.botHistory.shift();io.to(r.code).emit("chat",{name:p.name,text:message,team:false});
  }
  });
+ s.on("leaveRoom",()=>{for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;s.leave(code);if(r.aiMode){rooms.delete(code);break;}r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);break;}});
  s.on("disconnect",()=>{removeFromQueue(s.id);for(const [code,r] of rooms){const p=r.players.get(s.id);if(!p)continue;if(r.phase==="lobby"){r.players.delete(s.id);if(r.host===s.id)r.host=r.players.keys().next().value;if(!r.players.size)rooms.delete(code);else sendState(r);}else if(p.alive){p.connected=false;p.alive=false;log(r,p.name+"님이 접속 종료로 게임에서 이탈했습니다.");const w=endCheck(r);if(w)finish(r,w);else{sendState(r);if(r.phase==="day_vote"&&allAliveVoted(r))resolveVote(r);}}}});
 });
 const PORT=process.env.PORT||3000;server.listen(PORT,"0.0.0.0",()=>console.log("MAFIA ONLINE listening on "+PORT));
