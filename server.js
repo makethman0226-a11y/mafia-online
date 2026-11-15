@@ -245,7 +245,7 @@ function resolveVote(r){
  const skippedCount=Object.keys(r.skippedVotes||{}).length;
  const tallyLines=sorted.map(([id,count])=>{const target=r.players.get(id);return (target?.name||"알 수 없는 플레이어")+" : "+count+"표";});
  tallyLines.push("건너뛰기 : "+skippedCount+"표");
- let resultText="투표 결과\\n"+(tallyLines.length?tallyLines.join("\\n"):"득표 없음")+"\\n\\n";
+ let resultText="투표 결과\n"+(sorted.length?tallyLines.slice(0,-1).join("\n"):"득표 없음")+"\n"+tallyLines[tallyLines.length-1]+"\n\n";
  let jesterWon=false;
  if(sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])){
   const target=r.players.get(sorted[0][0]);
@@ -260,7 +260,7 @@ function resolveVote(r){
   }
  }else{
   log(r,"동점 또는 투표 없음: 아무도 탈락하지 않았습니다.");
-  resultText="이번 투표에서는 아무도 탈락하지 않았습니다.";
+  resultText+="이번 투표에서는 아무도 탈락하지 않았습니다.";
  }
  const evilRemaining=alive(r).filter(p=>p.team==="evil").length;
  resultText+="\n악인팀이 "+evilRemaining+"명 남았습니다.";
