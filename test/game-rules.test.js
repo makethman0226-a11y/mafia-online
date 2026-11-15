@@ -148,3 +148,20 @@ test("방 설정은 공개·비공개 및 토론·투표 시간을 방장이 저
   assert.match(server, /r\.visibility=next\.visibility/);
   assert.match(server, /filter\(r=>r\.visibility==="public"&&r\.phase==="lobby"\)/);
 });
+
+
+test("투표 건너뛰기는 기권으로 기록되고 모든 생존자가 투표 또는 건너뛰기를 하면 결과를 확정한다", () => {
+  assert.match(server, /s\.on\("skipVote"/);
+  assert.match(server, /r\.skippedVotes\[s\.id\]=true/);
+  assert.match(server, /voters\.every\(p=>!!r\.votes\[p\.id\]\|\|!!r\.skippedVotes\?\.\[p\.id\]\)/);
+  assert.match(server, /hasVoted:!!r\.votes\[p\.id\]\|\|!!r\.skippedVotes\?\.\[p\.id\]/);
+  assert.match(client, /button\("투표 건너뛰기",\(\)=>socket\.emit\("skipVote"\)\)/);
+});
+
+test("투표 결과는 대상별 득표수와 기권 수를 공개하고 최다 득표자를 탈락 처리한다", () => {
+  assert.match(server, /const tallyLines=sorted\.map/);
+  assert.match(server, /tallyLines\.push\("건너뛰기 : "\+skippedCount\+"표"\)/);
+  assert.match(server, /target\.alive=false/);
+  assert.match(server, /emit\("voteResult",\{text:resultText,counts:/);
+  assert.match(html, /대상별 득표수와 건너뛰기 수를 공개/);
+});
