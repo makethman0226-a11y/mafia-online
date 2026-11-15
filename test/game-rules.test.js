@@ -182,3 +182,17 @@ test("AI 토론 발언은 반복을 줄이고 일정한 간격으로 여러 차�
   assert.match(server, /bot\.lastBotLine=line/);
   assert.match(server, /b\.id!==r\.lastBotSpeakerId/);
 });
+
+
+test("선교사는 첫째·셋째·다섯째 밤에 공격할 수 있고 중간 밤에는 공격할 수 없다", () => {
+  assert.match(server, /missionaryCanKill:r\.day>=2&&r\.day%2===0/);
+  assert.match(server, /if\(type==="missionaryKill"&&\(r\.day<2\|\|r\.day%2!==0\)\)/);
+  assert.match(server, /missionaryKill:"night_missionary"/);
+  assert.match(client, /button\("선교사 공격",\(\)=>emitAction\("missionaryKill",p\.id\)\)/);
+});
+
+test("선교사의 공격은 같은 악인 팀을 공격하지 않고 밤 결과에서 탈락 처리한다", () => {
+  assert.match(server, /type==="missionaryKill"\)\&\&t\.team==="evil"/);
+  assert.match(server, /const missionaryTarget=Object\.values\(act\)\.find\(x=>x\.type==="missionaryKill"\)\?\.target/);
+  assert.match(server, /선교사의 공격으로 한 명이 탈락했습니다/);
+});
