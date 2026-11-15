@@ -85,3 +85,20 @@ test("온라인 방과 AI 대련 모두 같은 설정을 전달하며 대기실�
   assert.match(html, /id="setupMaxPlayers"/);
   assert.match(html, /id="lobbySettings"/);
 });
+
+
+test("게임 종료 시 모든 참가자의 실제 직업과 진영을 공개한다", () => {
+  assert.match(server, /role:r\.phase==="ended"\?x\.role/);
+  assert.match(server, /team:r\.phase==="ended"\?x\.team:null/);
+  assert.match(server, /function finish\(r,w\)\{r\.phase="ended"/);
+});
+
+test("결과 화면은 참가자 전체 직업을 표시하고 확인 시 메인 화면으로 돌아간다", () => {
+  assert.match(client, /state\.phase==="ended"/);
+  assert.match(client, /모든 참가자의 최종 직업이 공개되었습니다/);
+  assert.match(client, /button\("확인",\(\)=>\{/);
+  assert.match(client, /socket\.emit\("leaveRoom"\)/);
+  assert.match(client, /\$\("home"\)\.classList\.remove\("hidden"\)/);
+  assert.match(html, /id="gameResult"/);
+  assert.match(server, /s\.on\("leaveRoom"/);
+});
