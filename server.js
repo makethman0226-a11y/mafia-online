@@ -27,7 +27,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,settings:r.settings||null,visibility:r.visibility||"public",voteCounts,skippedCount:Object.keys(r.skippedVotes||{}).length,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id]||!!r.skippedVotes?.[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:!!p.used?.judgeNight,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id]||!!r.skippedVotes?.[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:!!p.used?.judgeNight,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null,missionaryCanConvert:!p.used?.convert,missionaryCanKill:r.day>=2&&r.day%2===0};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:r.phase==="ended"?x.role:(!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)),team:r.phase==="ended"?x.team:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -192,7 +192,7 @@ function runBotNight(r){
   if(b.role==="마피아"&&!Object.values(r.actions).some(x=>x.type==="attack")){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["attack:"+b.id]={type:"attack",actor:b.id,target:t.id};}
   if(b.role==="의사"){const t=botChoose(r,others);if(t)r.actions["heal:"+b.id]={type:"heal",actor:b.id,target:t.id};}
   if(b.role==="자경단"){const t=botChoose(r,others);if(t)r.actions["vigilante:"+b.id]={type:"vigilante",actor:b.id,target:t.id};}
-  if(b.role==="선교사"&&!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}
+  if(b.role==="선교사"){if(r.day>=2&&r.day%2===0){const t=botChoose(r,others.filter(x=>x.team!=="evil"));if(t)r.actions["missionaryKill:"+b.id]={type:"missionaryKill",actor:b.id,target:t.id};}else if(!b.used.convert){const t=botChoose(r,others.filter(x=>x.team==="good"));if(t)r.actions["convert:"+b.id]={type:"convert",actor:b.id,target:t.id};}}
   if(b.role==="제사장"&&!b.used.revive){const t=botChoose(r,[...r.players.values()].filter(x=>!x.alive));if(t)r.actions["revive:"+b.id]={type:"revive",actor:b.id,target:t.id};}
  }
 }
@@ -207,7 +207,7 @@ const NIGHT_TURNS=[
  {role:"제사장",phase:"night_priest"},
  {role:"판사",phase:"night_judge"}
 ];
-const NIGHT_PHASE_BY_TYPE={attack:"night_mafia",vigilante:"night_vigilante",convert:"night_missionary",heal:"night_doctor",revive:"night_priest"};
+const NIGHT_PHASE_BY_TYPE={attack:"night_mafia",vigilante:"night_vigilante",convert:"night_missionary",missionaryKill:"night_missionary",heal:"night_doctor",revive:"night_priest"};
 function beginNightTurn(r,index=0){
  if(index>=NIGHT_TURNS.length)return nightResolve(r);
  const turn=NIGHT_TURNS[index],members=alive(r).filter(p=>p.role===turn.role&&canTakeNightTurn(r,p,turn.role));
@@ -231,7 +231,7 @@ function beginNightTurn(r,index=0){
      target=r.players.get(b.vigilanteTargetId);if(target?.alive)type="vigilante";else b.vigilanteTargetId=null;
     }
    }
-   if(turn.role==="선교사"&&!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}
+   if(turn.role==="선교사"){if(r.day>=2&&r.day%2===0){target=botChoose(r,others.filter(x=>x.team!=="evil"));type="missionaryKill";}else if(!b.used.convert){target=botChoose(r,others.filter(x=>x.team==="good"));type="convert";}}
    if(turn.role==="경찰"){target=botPickSuspect(r,b,others);if(target&&target.team==="evil")r.botSuspicion[target.id]=(r.botSuspicion[target.id]||0)+2;}
    if(turn.role==="스파이"){target=botPickSuspect(r,b,others);if(target?.role==="마피아"){b.joined=true;target.joined=true;}}
    if(turn.role==="의사"){target=botChoose(r,others);type="heal";}
@@ -248,7 +248,7 @@ function canTakeNightTurn(r,p,role){
   const target=p.vigilanteTargetId?r.players.get(p.vigilanteTargetId):null;
   return !!(target?.alive&&r.day>p.vigilanteInvestigatedDay);
  }
- if(role==="선교사")return !p.used.convert;
+ if(role==="선교사")return !p.used.convert||(r.day>=2&&r.day%2===0);
  if(role==="경찰")return p.used.policeNight!==r.day;
  if(role==="스파이")return p.used.spyNight!==r.day;
  if(role==="제사장")return !p.used.revive&&[...r.players.values()].some(x=>!x.alive&&x.connected!==false);
@@ -267,6 +267,8 @@ function nightResolve(r){
  const mafia=Object.values(act).filter(x=>x.type==="attack").map(x=>x.target).filter(Boolean);
  const target=mafia[0], save=Object.values(act).find(x=>x.type==="heal")?.target;
  if(target&&target!==save){const victim=r.players.get(target);if(markDead(victim,"이 밤에 탈락했습니다."))log(r,victim.name+"님이 밤에 탈락했습니다.");}
+ const missionaryTarget=Object.values(act).find(x=>x.type==="missionaryKill")?.target;
+ if(missionaryTarget&&missionaryTarget!==save){const victim=r.players.get(missionaryTarget);if(markDead(victim,"이 밤에 선교사의 공격으로 탈락했습니다."))log(r,"선교사의 공격으로 한 명이 탈락했습니다.");}
  const vigil=Object.values(act).find(x=>x.type==="vigilante");
  if(vigil){const v=r.players.get(vigil.actor),t=r.players.get(vigil.target);if(v?.alive&&t?.alive&&t.team==="evil"){if(markDead(t,"이 밤에 자경단의 공격으로 탈락했습니다."))log(r,"자경단의 공격으로 악인 한 명이 탈락했습니다.");}else if(v?.alive&&t?.alive){log(r,"자경단의 공격은 아무도 탈락시키지 못했습니다.");}}
  for(const x of Object.values(act)){const p=r.players.get(x.actor),t=r.players.get(x.target);if(!p?.alive||!t||(x.type!=="revive"&&!t.alive))continue;
@@ -367,15 +369,17 @@ io.on("connection",s=>{
  if(!String(r.phase).startsWith("night_"))return;
  if(type!=="revive"&&!t.alive)return;
  if(type==="revive"&&(t.alive||t.connected===false||p.used.revive))return;
- const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:"convert",제사장:"revive"};
- if(allowed[p.role]!==type||p.id===t.id||r.phase!==NIGHT_PHASE_BY_TYPE[type])return;
- if(type==="attack"&&t.team==="evil"){s.emit("errorMsg","마피아는 같은 악인 팀을 공격할 수 없습니다.");return;}
+ const allowed={의사:"heal",마피아:"attack",자경단:"vigilante",선교사:["convert","missionaryKill"],제사장:"revive"};
+ if(!(Array.isArray(allowed[p.role])?allowed[p.role].includes(type):allowed[p.role]===type)||p.id===t.id||r.phase!==NIGHT_PHASE_BY_TYPE[type])return;
+ if((type==="attack"||type==="missionaryKill")&&t.team==="evil"){s.emit("errorMsg","같은 악인 팀은 공격할 수 없습니다.");return;}
+ if(type==="missionaryKill"&&(r.day<2||r.day%2!==0)){s.emit("errorMsg","선교사의 공격은 하루 간격으로 밤에만 사용할 수 있습니다.");return;}
  
  if(type==="revive"&&t.alive)return;
  if(type==="convert"&&p.used.convert)return;
+ if(type==="missionaryKill"&&p.role==="선교사"&&(r.day<2||r.day%2!==0))return;
  if(type==="vigilante"&&(p.role!=="자경단"||!p.used.vigilanteInvestigated||!p.vigilanteTargetId||p.vigilanteTargetId!==t.id||r.day<=p.vigilanteInvestigatedDay))return;
  r.actions[type+":"+p.id]={type,actor:p.id,target:t.id};
- const abilityLabels={heal:"치료",attack:"공격",judge:"처벌",vigilante:"공격",convert:"전향",revive:"부활"};recordAbility(p,r,t,abilityLabels[type]||type);
+ const abilityLabels={heal:"치료",attack:"공격",judge:"처벌",vigilante:"공격",convert:"전향",missionaryKill:"선교사 공격",revive:"부활"};recordAbility(p,r,t,abilityLabels[type]||type);
  if(p.role==="스파이"&&type==="spy"){s.emit("privateResult",{text:"상대 직업: "+t.role});if(t.role==="마피아"){p.joined=true;t.joined=true;log(r,"스파이가 마피아와 서로 정체를 확인했습니다.");}}
  advanceNightTurn(r);
  });
