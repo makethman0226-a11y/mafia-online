@@ -228,8 +228,8 @@ function nightResolve(r){
 
  const nightText=deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.";
  const judgeAction=Object.values(act).find(x=>x.type==="judge");
- if(judgeAction){const judge=r.players.get(judgeAction.actor),target=r.players.get(judgeAction.target);if(judge?.alive&&target?.alive){if(target.team==="evil"){markDead(target,"이 밤에 판결로 탈락했습니다.");log(r,"판사의 판결로 "+target.name+"님이 탈락했습니다.");}else{markDead(judge,"이 밤に 잘못된 판결로 탈락했습니다.");log(r,"판사가 선량한 플레이어에게 판결을 내려 탈락했습니다.");}}}
- io.to(r.code).emit("nightResult",{text:(judgeAction?"판사가 판결을 내렸습니다.\\n":"")+(deaths.length?deaths.join("\\n"):"오늘 밤 탈락자는 없습니다.")});
+ if(judgeAction){const judge=r.players.get(judgeAction.actor),target=r.players.get(judgeAction.target);if(judge?.alive&&target?.alive){if(target.team==="evil"){markDead(target,"이 밤에 판결로 탈락했습니다.");log(r,"판사의 판결로 "+target.name+"님이 탈락했습니다.");}else{markDead(judge,"이 밤에 잘못된 판결로 탈락했습니다.");log(r,"판사가 선량한 플레이어에게 판결을 내려 탈락했습니다.");}}}
+ io.to(r.code).emit("nightResult",{text:(judgeAction?"판사가 판결을 내렸습니다.\n":"")+(deaths.length?deaths.join("\n"):"오늘 밤 탈락자는 없습니다.")});
  const w=endCheck(r);if(w)return finish(r,w);
  r.phase="day_discuss";r.endsAt=Date.now()+r.settings.discussionSeconds*1000;r.actions={};r.botChatCount=0;r.nextBotChatAt=Date.now()+3000;log(r,"아침입니다. 토론을 시작하세요.");sendState(r);
 }
