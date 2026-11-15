@@ -27,7 +27,7 @@ function publicState(r){
  return {code:r.code,phase:r.phase,day:r.day,aiMode:!!r.aiMode,settings:r.settings||null,visibility:r.visibility||"public",voteCounts,skippedCount:Object.keys(r.skippedVotes||{}).length,serverNow:Date.now(),players:[...r.players.values()].map(p=>({id:p.id,name:p.name,alive:p.alive,role:!p.alive&&p.team==="evil"?revealedRole(p):null})),host:r.host,endsAt:r.endsAt,log:r.log.slice(-30),winner:r.winner};
 }
 function viewFor(r,p){
- const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id]||!!r.skippedVotes?.[p.id],reporterUsed:p.used?.reporterDay===r.day,judgeUsed:!!p.used?.judgeNight,policeUsed:p.used?.policeNight===r.day,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null,missionaryCanConvert:!p.used?.convert,missionaryCanKill:r.day>=2&&r.day%2===0};
+ const st=publicState(r); st.me={id:p.id,name:p.name,role:p.role,alive:p.alive,team:p.team,joined:p.joined,isPresident:p.id===r.presidentId,canVote:p.alive&&r.phase==="day_vote",hasVoted:!!r.votes[p.id]||!!r.skippedVotes?.[p.id],reporterUsed:!!p.used?.reporter,judgeUsed:!!p.used?.judgeNight,policeUsed:false,spyUsed:p.used?.spyNight===r.day,lastAbility:p.lastAbility||null,vigilanteInvestigated:!!p.used?.vigilanteInvestigated,vigilanteTargetId:p.vigilanteTargetId||null,vigilanteInvestigatedDay:p.vigilanteInvestigatedDay??null,missionaryCanConvert:!p.used?.convert,missionaryCanKill:r.day>=2&&r.day%2===0};
  st.players=[...r.players.values()].map(x=>({id:x.id,name:x.name,alive:x.alive,connected:x.connected!==false,role:r.phase==="ended"?x.role:(!x.alive&&x.team==="evil"?revealedRole(x):(x.id===p.id?x.role:null)),team:r.phase==="ended"?x.team:null}));
  st.teamChatAllowed=!!(p.alive&&p.team==="evil"&&p.joined);
  return st;
@@ -249,7 +249,7 @@ function canTakeNightTurn(r,p,role){
   return !!(target?.alive&&r.day>p.vigilanteInvestigatedDay);
  }
  if(role==="선교사")return !p.used.convert||(r.day>=2&&r.day%2===0);
- if(role==="경찰")return p.used.policeNight!==r.day;
+ if(role==="경찰")return true;
  if(role==="스파이")return p.used.spyNight!==r.day;
  if(role==="제사장")return !p.used.revive&&[...r.players.values()].some(x=>!x.alive&&x.connected!==false);
  if(role==="판사")return !p.used.judgeNight;
@@ -387,8 +387,8 @@ io.on("connection",s=>{
   const {target}=payload&&typeof payload==="object"?payload:{};
   const r=[...rooms.values()].find(x=>x.players.has(s.id)),p=r?.players.get(s.id),t=r?.players.get(target);
   if(!r||!p?.alive||!t?.alive||p.id===t.id)return;
-    if(p.role==="경찰"&&r.phase==="night_police"&&p.used.policeNight!==r.day){
-   p.used.policeNight=r.day;recordAbility(p,r,t,"경찰 조사");
+    if(p.role==="경찰"&&r.phase==="night_police"){
+   recordAbility(p,r,t,"경찰 조사");
    s.emit("privateResult",{text:t.name+"님의 직업은 "+t.role+"입니다. (경찰에게만 공개)"});
    advanceNightTurn(r);
    return;
@@ -407,8 +407,8 @@ io.on("connection",s=>{
    s.emit("privateResult",{text:t.name+"님 조사 결과: "+(t.team==="evil"?"악인입니다. 다음 밤에 이 대상을 공격할 수 있습니다.":"악인이 아닙니다. 자경단의 1회 조사는 끝났습니다.")});
    sendState(r);advanceNightTurn(r);return;
   }
-  if(p.role==="기자"&&r.phase==="day_discuss"&&r.day>1&&p.used.reporterDay!==r.day){
-   p.used.reporterDay=r.day;recordAbility(p,r,t,"기자 발표");
+  if(p.role==="기자"&&r.phase==="day_discuss"&&r.day>1&&!p.used.reporter){
+   p.used.reporter=true;recordAbility(p,r,t,"기자 발표");
    const announcement="기자 발표: "+t.name+"님의 직업은 "+t.role+"입니다.";
    log(r,announcement);
    io.to(r.code).emit("reporterAnnouncement",{text:announcement});
