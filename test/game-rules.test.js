@@ -22,7 +22,7 @@ test("클러쳐의 시민 위장은 탈락 공개에만 적용하고 조사·기
 });
 
 test("마피아는 같은 악인 팀을 공격할 수 없다", () => {
-  assert.match(server, /if\(type==="attack"&&t\.team==="evil"\)/);
+  assert.match(server, /type==="attack"\|\|type==="missionaryKill"\)\&\&t\.team==="evil"/);
 });
 
 test("국회의원은 항상 투표 면역이 아니며 대통령만 투표 대상에서 제외된다", () => {
