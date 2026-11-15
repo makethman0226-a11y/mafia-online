@@ -135,7 +135,7 @@ test("비밀투표는 투표자 정보를 공개하지 않고 대상별 득표�
 test("판사봉은 판사 밤 차례에만 표시되고 버튼을 누른 뒤 대상 선택으로 판결한다", () => {
   assert.match(html, /id="judgeGavel"/);
   assert.match(client, /judgeMode=!judgeMode/);
-  assert.match(client, /state\.phase==="night_judge"&&me\?\.role==="판사"&&judgeMode/);
+  assert.match(client, /state\.phase==="night_judge"&&me\.role==="판사"&&judgeMode/);
   assert.match(server, /io\.to\(r\.code\)\.emit\("judgementAnnouncement",\{text:"판사가 판결을 내렸습니다"\}\)/);
 });
 
