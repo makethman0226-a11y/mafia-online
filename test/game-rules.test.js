@@ -196,3 +196,25 @@ test("선교사의 공격은 같은 악인 팀을 공격하지 않고 밤 결과
   assert.match(server, /const missionaryTarget=Object\.values\(act\)\.find\(x=>x\.type==="missionaryKill"\)\?\.target/);
   assert.match(server, /선교사의 공격으로 한 명이 탈락했습니다/);
 });
+
+
+test("판사와 제사장은 각각 게임 전체에서 1회만 능력을 사용할 수 있다", () => {
+  assert.match(server, /if\(role==="판사"\)return !p\.used\.judgeNight/);
+  assert.match(server, /if\(role==="제사장"\)return !p\.used\.revive/);
+  assert.match(server, /p\.used\.judgeNight=true/);
+  assert.match(server, /p\.used\.revive=true/);
+});
+
+test("의사는 매일 밤 제한 없이 보호하고 경찰은 매일 밤 무제한 조사할 수 있다", () => {
+  assert.match(server, /if\(role==="경찰"\)return true/);
+  assert.match(server, /if\(p\.role==="경찰"\&\&r\.phase==="night_police"\)\{/);
+  assert.doesNotMatch(server, /p\.used\.policeNight!==r\.day/);
+  assert.match(server, /if\(b\.role==="의사"\)/);
+  assert.match(server, /type==="heal"/);
+});
+
+test("기자는 게임 전체에서 1회만 취재·발표할 수 있다", () => {
+  assert.match(server, /!p\.used\.reporter\)/);
+  assert.match(server, /p\.used\.reporter=true/);
+  assert.match(server, /reporterUsed:!!p\.used\?\.reporter/);
+});
